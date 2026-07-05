@@ -34,7 +34,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. KONEKSI GOOGLE SHEETS DENGAN ERROR HANDLING
+# 2. KONEKSI GOOGLE SHEETS (ANTI-KESELEK)
 # ==========================================
 NAMA_SPREADSHEET = "Database_Portofolio_Pengawas"
 
@@ -45,7 +45,17 @@ def get_gspread_client():
         if "gcp" not in st.secrets or "kunci_json" not in st.secrets["gcp"]:
             return None, "Kunci Secrets GCP belum disetting di Streamlit."
             
-        creds_dict = json.loads(st.secrets["gcp"]["kunci_json"])
+        # Perbaikan Khusus: Tambahkan strict=False agar aman dari JSONDecodeError (Karakter Tersembunyi)
+        kunci_mentah = st.secrets["gcp"]["kunci_json"]
+        
+        # Bersihkan string yang mungkin membawa newline tidak sah akibat copy-paste
+        import ast
+        try:
+            creds_dict = json.loads(kunci_mentah, strict=False)
+        except:
+            # Plan B: Jika json.loads gagal, gunakan pemrosesan literal yang lebih kuat
+            creds_dict = ast.literal_eval(kunci_mentah.replace('\n', ''))
+            
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         return client, "Sukses"
@@ -129,7 +139,7 @@ if st.session_state.show_login and not st.session_state.logged_in:
                     else:
                         st.error("❌ Email atau Password salah!")
                 else:
-                    st.error("⚠️ Database User kosong atau gagal dimuat.")
+                    st.error("⚠️ Database User kosong atau gagal dimuat dari Google Sheets.")
             else:
                 st.error("Gagal terhubung ke database. Harap cek pengaturan Secrets.")
 
@@ -154,18 +164,15 @@ if st.session_state.show_register and not st.session_state.logged_in:
             reg_pass = col_reg4.text_input("🔑 Buat Password Baru (Wajib 1 Huruf Kapital & 1 Angka)", type="password")
             
             if st.form_submit_button("Daftar Sekarang", type="primary"):
-                # 1. Validasi Kolom Kosong
                 if not all([reg_nama, reg_sekolah, reg_email, reg_pass]):
                     st.error("⚠️ Mohon lengkapi seluruh kolom pendaftaran di atas.")
                 else:
-                    # 2. Validasi Keamanan Password
                     has_upper = any(char.isupper() for char in reg_pass)
                     has_digit = any(char.isdigit() for char in reg_pass)
                     
                     if not (has_upper and has_digit and len(reg_pass) >= 6):
                         st.error("❌ PENDAFTARAN GAGAL: Password WAJIB terdiri dari minimal 6 karakter, mengandung minimal 1 Huruf Kapital, dan 1 Angka!")
                     else:
-                        # 3. Proses Simpan ke Database
                         if client:
                             try:
                                 sheet_users = client.open(NAMA_SPREADSHEET).worksheet("User")
