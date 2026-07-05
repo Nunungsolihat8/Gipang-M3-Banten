@@ -43,14 +43,14 @@ def get_gspread_client():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         if "gcp" not in st.secrets or "kunci_json" not in st.secrets["gcp"]:
-            return None, "Rahasia (Secrets) belum dikonfigurasi di Streamlit Cloud."
+            return None, "Kunci Secrets GCP belum disetting di Streamlit."
             
         creds_dict = json.loads(st.secrets["gcp"]["kunci_json"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         return client, "Sukses"
     except Exception as e:
-        return None, str(e)
+        return None, f"Error Kredensial: {str(e)}"
 
 client, conn_status = get_gspread_client()
 
@@ -109,11 +109,12 @@ if st.session_state.show_login and not st.session_state.logged_in:
         st.markdown("#### 🔐 Portal Autentikasi Ruang Kerja")
         
         if client is None:
-            st.error(f"Koneksi Database Terputus. Detail: {conn_status}")
+            st.error(f"Koneksi Database Terputus! {conn_status}")
             
         st.info("Silakan login menggunakan Email dan Password yang telah terdaftar.")
         e_login = st.text_input("📧 Alamat Email")
         p_login = st.text_input("🔑 Password", type="password")
+        
         if st.button("Login Sekarang", type="primary"):
             if client:
                 df_users = load_data("User")
@@ -139,24 +140,32 @@ if st.session_state.show_register and not st.session_state.logged_in:
         st.write("Silakan isi data diri dan sekolah Anda dengan lengkap.")
         
         if client is None:
-            st.error(f"Koneksi Database Terputus. Detail: {conn_status}")
+            st.error(f"Koneksi Database Terputus! {conn_status}")
             
         with st.form("form_registrasi"):
             col_reg1, col_reg2 = st.columns(2)
             reg_nama = col_reg1.text_input("👤 Nama Lengkap")
             reg_sekolah = col_reg2.text_input("🏫 Asal Sekolah")
+            
             reg_email = st.text_input("📧 Alamat Email (Akan digunakan untuk Login)")
+            
             col_reg3, col_reg4 = st.columns(2)
             reg_role = col_reg3.selectbox("💼 Pilih Role Anda", ["Kepala Sekolah", "Operator"])
-            reg_pass = col_reg4.text_input("🔑 Buat Password Baru", type="password")
+            reg_pass = col_reg4.text_input("🔑 Buat Password Baru (Wajib 1 Huruf Kapital & 1 Angka)", type="password")
             
             if st.form_submit_button("Daftar Sekarang", type="primary"):
-                # Validasi kelengkapan form
-                if reg_nama and reg_sekolah and reg_email and reg_pass:
-                    # Validasi wajib 1 Kapital dan 1 Angka
-                    if not any(char.isupper() for char in reg_pass) or not any(char.isdigit() for char in reg_pass):
-                        st.error("⚠️ Gagal: Password WAJIB mengandung minimal 1 Huruf Kapital dan 1 Angka!")
+                # 1. Validasi Kolom Kosong
+                if not all([reg_nama, reg_sekolah, reg_email, reg_pass]):
+                    st.error("⚠️ Mohon lengkapi seluruh kolom pendaftaran di atas.")
+                else:
+                    # 2. Validasi Keamanan Password
+                    has_upper = any(char.isupper() for char in reg_pass)
+                    has_digit = any(char.isdigit() for char in reg_pass)
+                    
+                    if not (has_upper and has_digit and len(reg_pass) >= 6):
+                        st.error("❌ PENDAFTARAN GAGAL: Password WAJIB terdiri dari minimal 6 karakter, mengandung minimal 1 Huruf Kapital, dan 1 Angka!")
                     else:
+                        # 3. Proses Simpan ke Database
                         if client:
                             try:
                                 sheet_users = client.open(NAMA_SPREADSHEET).worksheet("User")
@@ -164,11 +173,9 @@ if st.session_state.show_register and not st.session_state.logged_in:
                                 st.success("✅ Pendaftaran Berhasil! Silakan klik tombol 'Masuk' di atas untuk Login.")
                                 st.balloons()
                             except Exception as e:
-                                st.error(f"Gagal menulis ke Google Sheets. Pastikan robot sudah diundang sebagai Editor. Detail Error: {e}")
+                                st.error(f"Gagal menulis ke Google Sheets. Pastikan robot sudah diundang sebagai Editor. Detail: {e}")
                         else:
                             st.error(f"Gagal terhubung ke database. Detail: {conn_status}")
-                else:
-                    st.error("⚠️ Mohon lengkapi seluruh kolom pendaftaran di atas.")
 
 # ==========================================
 # 4. WORKSPACE ROUTER (SIDEBAR EKSKLUSIF)
@@ -253,7 +260,22 @@ elif sub_menu == "Dashboard Admin":
 
 elif sub_menu == "Upload Materi Pusat":
     st.title("📤 Publikasi Materi Instruksional Pusat")
-    st.write("Fitur Publikasi Aktif (Tersambung ke Database)")
+    
+    with st.form("form_materi"):
+        judul_materi = st.text_input("Judul Materi")
+        kategori_materi = st.selectbox("Kategori", ["Regulasi", "Modul Ajar", "Template"])
+        file_materi = st.file_uploader("Upload File")
+        
+        if st.form_submit_button("Publikasikan ke Website"):
+            if judul_materi and file_materi and client:
+                sheet_materi = client.open(NAMA_SPREADSHEET).worksheet("Materi_Publik")
+                tgl = datetime.datetime.now().strftime("%d %b %Y")
+                ukuran = f"{round(file_materi.size / (1024*1024), 2)} MB"
+                sheet_materi.append_row([judul_materi, kategori_materi, tgl, ukuran, "🆕"])
+                st.success("Berhasil tersimpan ke Google Sheets! Silakan cek Beranda Publik.")
+                st.balloons()
+            else:
+                st.error("Gagal! Pastikan file dipilih dan koneksi terhubung.")
 
 elif sub_menu == "Dashboard Kepala Sekolah":
     st.title(f"🏛️ Ruang Kerja Manajerial")
@@ -265,7 +287,22 @@ elif sub_menu == "Dashboard Operator":
 
 elif sub_menu == "Upload Artefak":
     st.title("📤 Unggah Berkas Komponen Mutu")
-    st.info("Form Upload Siap (Terhubung ke Google Sheets)")
     
+    df_tagihan = load_data("Tagihan_Tugas")
+    daftar_tugas = df_tagihan["Nama_Tugas"].tolist() if not df_tagihan.empty else ["Belum ada tagihan tugas"]
+    
+    with st.form("form_artefak"):
+        tugas = st.selectbox("Pilih Tugas yang Ingin Dikumpulkan", daftar_tugas)
+        file_art = st.file_uploader("Upload Bukti Dokumen (Maks 5MB)")
+        
+        if st.form_submit_button("Kirim Artefak"):
+            if file_art and client:
+                sheet_art = client.open(NAMA_SPREADSHEET).worksheet("Artefak_Portofolio")
+                tgl = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                sheet_art.append_row([tgl, st.session_state.user_name, tugas, "File_Terkirim", "Menunggu Validasi", ""])
+                st.success("Terkirim ke Pengawas! Mohon tunggu proses validasi.")
+                st.balloons()
+            else:
+                st.error("Pilih file terlebih dahulu.")
 else:
     st.title(sub_menu)
