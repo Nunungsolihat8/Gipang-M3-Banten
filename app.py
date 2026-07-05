@@ -34,7 +34,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. KONEKSI GOOGLE SHEETS
+# 2. KONEKSI GOOGLE SHEETS DENGAN ERROR HANDLING
 # ==========================================
 NAMA_SPREADSHEET = "Database_Portofolio_Pengawas"
 
@@ -42,13 +42,17 @@ NAMA_SPREADSHEET = "Database_Portofolio_Pengawas"
 def get_gspread_client():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        if "gcp" not in st.secrets or "kunci_json" not in st.secrets["gcp"]:
+            return None, "Rahasia (Secrets) belum dikonfigurasi di Streamlit Cloud."
+            
         creds_dict = json.loads(st.secrets["gcp"]["kunci_json"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        return gspread.authorize(creds)
-    except:
-        return None
+        client = gspread.authorize(creds)
+        return client, "Sukses"
+    except Exception as e:
+        return None, str(e)
 
-client = get_gspread_client()
+client, conn_status = get_gspread_client()
 
 def load_data(sheet_name):
     if client:
@@ -103,23 +107,30 @@ with col_nav3:
 if st.session_state.show_login and not st.session_state.logged_in:
     with st.container(border=True):
         st.markdown("#### 🔐 Portal Autentikasi Ruang Kerja")
+        
+        if client is None:
+            st.error(f"Koneksi Database Terputus. Detail: {conn_status}")
+            
         st.info("Silakan login menggunakan Email dan Password yang telah terdaftar.")
         e_login = st.text_input("📧 Alamat Email")
         p_login = st.text_input("🔑 Password", type="password")
         if st.button("Login Sekarang", type="primary"):
-            df_users = load_data("User")
-            if not df_users.empty:
-                user_match = df_users[(df_users['Email'].astype(str) == e_login) & (df_users['Password'].astype(str) == p_login)]
-                if not user_match.empty:
-                    st.session_state.logged_in = True
-                    st.session_state.user_role = user_match.iloc[0]['Role']
-                    st.session_state.user_name = f"{user_match.iloc[0]['Nama_Lengkap']} - {user_match.iloc[0]['Asal_Sekolah']}"
-                    st.session_state.show_login = False
-                    st.rerun()
+            if client:
+                df_users = load_data("User")
+                if not df_users.empty:
+                    user_match = df_users[(df_users['Email'].astype(str) == e_login) & (df_users['Password'].astype(str) == p_login)]
+                    if not user_match.empty:
+                        st.session_state.logged_in = True
+                        st.session_state.user_role = user_match.iloc[0]['Role']
+                        st.session_state.user_name = f"{user_match.iloc[0]['Nama_Lengkap']} - {user_match.iloc[0]['Asal_Sekolah']}"
+                        st.session_state.show_login = False
+                        st.rerun()
+                    else:
+                        st.error("❌ Email atau Password salah!")
                 else:
-                    st.error("❌ Email atau Password salah!")
+                    st.error("⚠️ Database User kosong atau gagal dimuat.")
             else:
-                st.error("⚠️ Database gagal dimuat.")
+                st.error("Gagal terhubung ke database. Harap cek pengaturan Secrets.")
 
 # --- POPUP FORM: REGISTRASI (REQUEST AKSES) ---
 if st.session_state.show_register and not st.session_state.logged_in:
@@ -127,27 +138,35 @@ if st.session_state.show_register and not st.session_state.logged_in:
         st.markdown("#### 🚀 Formulir Permohonan Akses (Pendaftaran)")
         st.write("Silakan isi data diri dan sekolah Anda dengan lengkap.")
         
+        if client is None:
+            st.error(f"Koneksi Database Terputus. Detail: {conn_status}")
+            
         with st.form("form_registrasi"):
             col_reg1, col_reg2 = st.columns(2)
-            reg_nama = col_reg1.text_input("👤 Nama Lengkap", placeholder="Contoh: Budi Santoso")
-            reg_sekolah = col_reg2.text_input("🏫 Asal Sekolah", placeholder="Contoh: SDN 1 Serang")
-            
+            reg_nama = col_reg1.text_input("👤 Nama Lengkap")
+            reg_sekolah = col_reg2.text_input("🏫 Asal Sekolah")
             reg_email = st.text_input("📧 Alamat Email (Akan digunakan untuk Login)")
-            
             col_reg3, col_reg4 = st.columns(2)
             reg_role = col_reg3.selectbox("💼 Pilih Role Anda", ["Kepala Sekolah", "Operator"])
             reg_pass = col_reg4.text_input("🔑 Buat Password Baru", type="password")
             
             if st.form_submit_button("Daftar Sekarang", type="primary"):
+                # Validasi kelengkapan form
                 if reg_nama and reg_sekolah and reg_email and reg_pass:
-                    if client:
-                        sheet_users = client.open(NAMA_SPREADSHEET).worksheet("User")
-                        # Memasukkan data pendaftar baru ke database Google Sheets
-                        sheet_users.append_row([reg_nama, reg_sekolah, reg_email, reg_role, reg_pass])
-                        st.success("✅ Pendaftaran Berhasil! Akun Anda sudah terdaftar di sistem. Silakan klik tombol 'Masuk' di atas untuk Login.")
-                        st.balloons()
+                    # Validasi wajib 1 Kapital dan 1 Angka
+                    if not any(char.isupper() for char in reg_pass) or not any(char.isdigit() for char in reg_pass):
+                        st.error("⚠️ Gagal: Password WAJIB mengandung minimal 1 Huruf Kapital dan 1 Angka!")
                     else:
-                        st.error("Gagal terhubung ke database.")
+                        if client:
+                            try:
+                                sheet_users = client.open(NAMA_SPREADSHEET).worksheet("User")
+                                sheet_users.append_row([reg_nama, reg_sekolah, reg_email, reg_role, reg_pass])
+                                st.success("✅ Pendaftaran Berhasil! Silakan klik tombol 'Masuk' di atas untuk Login.")
+                                st.balloons()
+                            except Exception as e:
+                                st.error(f"Gagal menulis ke Google Sheets. Pastikan robot sudah diundang sebagai Editor. Detail Error: {e}")
+                        else:
+                            st.error(f"Gagal terhubung ke database. Detail: {conn_status}")
                 else:
                     st.error("⚠️ Mohon lengkapi seluruh kolom pendaftaran di atas.")
 
