@@ -34,7 +34,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. KONEKSI GOOGLE SHEETS (ANTI-KESELEK)
+# 2. KONEKSI GOOGLE SHEETS
 # ==========================================
 NAMA_SPREADSHEET = "Database_Portofolio_Pengawas"
 
@@ -45,15 +45,11 @@ def get_gspread_client():
         if "gcp" not in st.secrets or "kunci_json" not in st.secrets["gcp"]:
             return None, "Kunci Secrets GCP belum disetting di Streamlit."
             
-        # Perbaikan Khusus: Tambahkan strict=False agar aman dari JSONDecodeError (Karakter Tersembunyi)
         kunci_mentah = st.secrets["gcp"]["kunci_json"]
-        
-        # Bersihkan string yang mungkin membawa newline tidak sah akibat copy-paste
         import ast
         try:
             creds_dict = json.loads(kunci_mentah, strict=False)
         except:
-            # Plan B: Jika json.loads gagal, gunakan pemrosesan literal yang lebih kuat
             creds_dict = ast.literal_eval(kunci_mentah.replace('\n', ''))
             
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -113,7 +109,7 @@ with col_nav3:
             st.session_state.show_register = True
             st.session_state.show_login = False
 
-# --- POPUP FORM: LOGIN ---
+# --- POPUP FORM: LOGIN (DENGAN CEK STATUS AKUN) ---
 if st.session_state.show_login and not st.session_state.logged_in:
     with st.container(border=True):
         st.markdown("#### 🔐 Portal Autentikasi Ruang Kerja")
@@ -121,7 +117,6 @@ if st.session_state.show_login and not st.session_state.logged_in:
         if client is None:
             st.error(f"Koneksi Database Terputus! {conn_status}")
             
-        st.info("Silakan login menggunakan Email dan Password yang telah terdaftar.")
         e_login = st.text_input("📧 Alamat Email")
         p_login = st.text_input("🔑 Password", type="password")
         
@@ -131,58 +126,58 @@ if st.session_state.show_login and not st.session_state.logged_in:
                 if not df_users.empty:
                     user_match = df_users[(df_users['Email'].astype(str) == e_login) & (df_users['Password'].astype(str) == p_login)]
                     if not user_match.empty:
-                        st.session_state.logged_in = True
-                        st.session_state.user_role = user_match.iloc[0]['Role']
-                        st.session_state.user_name = f"{user_match.iloc[0]['Nama_Lengkap']} - {user_match.iloc[0]['Asal_Sekolah']}"
-                        st.session_state.show_login = False
-                        st.rerun()
+                        status_akun = user_match.iloc[0].get('Status_Akun', 'Pending')
+                        
+                        # Cek apakah akun sudah divalidasi Pengawas
+                        if status_akun == 'Aktif':
+                            st.session_state.logged_in = True
+                            st.session_state.user_role = user_match.iloc[0]['Role']
+                            st.session_state.user_name = f"{user_match.iloc[0]['Nama_Lengkap']} - {user_match.iloc[0]['Asal_Sekolah']}"
+                            st.session_state.show_login = False
+                            st.rerun()
+                        else:
+                            st.warning("⏳ Akun Anda masih dalam status PENDING. Menunggu persetujuan/validasi dari Ibu Pengawas.")
                     else:
                         st.error("❌ Email atau Password salah!")
                 else:
-                    st.error("⚠️ Database User kosong atau gagal dimuat dari Google Sheets.")
+                    st.error("⚠️ Database User kosong atau gagal dimuat.")
             else:
-                st.error("Gagal terhubung ke database. Harap cek pengaturan Secrets.")
+                st.error("Gagal terhubung ke database.")
 
-# --- POPUP FORM: REGISTRASI (REQUEST AKSES) ---
+# --- POPUP FORM: REGISTRASI (STATUS OTOMATIS PENDING) ---
 if st.session_state.show_register and not st.session_state.logged_in:
     with st.container(border=True):
         st.markdown("#### 🚀 Formulir Permohonan Akses (Pendaftaran)")
-        st.write("Silakan isi data diri dan sekolah Anda dengan lengkap.")
+        st.write("Silakan isi data diri. Akun Anda akan aktif setelah disetujui Pengawas.")
         
-        if client is None:
-            st.error(f"Koneksi Database Terputus! {conn_status}")
-            
         with st.form("form_registrasi"):
             col_reg1, col_reg2 = st.columns(2)
             reg_nama = col_reg1.text_input("👤 Nama Lengkap")
             reg_sekolah = col_reg2.text_input("🏫 Asal Sekolah")
-            
-            reg_email = st.text_input("📧 Alamat Email (Akan digunakan untuk Login)")
-            
+            reg_email = st.text_input("📧 Alamat Email (Gunakan Email Aktif)")
             col_reg3, col_reg4 = st.columns(2)
             reg_role = col_reg3.selectbox("💼 Pilih Role Anda", ["Kepala Sekolah", "Operator"])
             reg_pass = col_reg4.text_input("🔑 Buat Password Baru (Wajib 1 Huruf Kapital & 1 Angka)", type="password")
             
             if st.form_submit_button("Daftar Sekarang", type="primary"):
                 if not all([reg_nama, reg_sekolah, reg_email, reg_pass]):
-                    st.error("⚠️ Mohon lengkapi seluruh kolom pendaftaran di atas.")
+                    st.error("⚠️ Mohon lengkapi seluruh kolom pendaftaran.")
                 else:
                     has_upper = any(char.isupper() for char in reg_pass)
                     has_digit = any(char.isdigit() for char in reg_pass)
                     
                     if not (has_upper and has_digit and len(reg_pass) >= 6):
-                        st.error("❌ PENDAFTARAN GAGAL: Password WAJIB terdiri dari minimal 6 karakter, mengandung minimal 1 Huruf Kapital, dan 1 Angka!")
+                        st.error("❌ GAGAL: Password minimal 6 karakter, wajib mengandung 1 Huruf Kapital & 1 Angka!")
                     else:
                         if client:
                             try:
                                 sheet_users = client.open(NAMA_SPREADSHEET).worksheet("User")
-                                sheet_users.append_row([reg_nama, reg_sekolah, reg_email, reg_role, reg_pass])
-                                st.success("✅ Pendaftaran Berhasil! Silakan klik tombol 'Masuk' di atas untuk Login.")
+                                # Menambahkan status "Pending" di akhir baris (Kolom F)
+                                sheet_users.append_row([reg_nama, reg_sekolah, reg_email, reg_role, reg_pass, "Pending"])
+                                st.success("✅ Pendaftaran Berhasil! Akun Anda berstatus PENDING. Silakan hubungi Pengawas untuk meminta persetujuan.")
                                 st.balloons()
                             except Exception as e:
-                                st.error(f"Gagal menulis ke Google Sheets. Pastikan robot sudah diundang sebagai Editor. Detail: {e}")
-                        else:
-                            st.error(f"Gagal terhubung ke database. Detail: {conn_status}")
+                                st.error(f"Gagal menulis ke Google Sheets. Detail: {e}")
 
 # ==========================================
 # 4. WORKSPACE ROUTER (SIDEBAR EKSKLUSIF)
@@ -198,9 +193,9 @@ if st.session_state.logged_in:
     """, unsafe_allow_html=True)
     
     if st.session_state.user_role == "Admin":
-        sub_menu = st.sidebar.radio("Menu Pengawas", ["Dashboard Admin", "Validasi Dokumen", "Upload Materi Pusat", "Log Out"])
+        sub_menu = st.sidebar.radio("Menu Pengawas", ["Dashboard Admin", "Manajemen Tagihan Tugas", "Validasi Akun Baru", "Upload Materi Pusat", "Log Out"])
     elif st.session_state.user_role == "Kepala Sekolah":
-        sub_menu = st.sidebar.radio("Menu Kepala Sekolah", ["Dashboard Kepala Sekolah", "Monitoring Capaian", "Persetujuan Akhir", "Log Out"])
+        sub_menu = st.sidebar.radio("Menu Kepala Sekolah", ["Dashboard Kepala Sekolah", "Persetujuan Akhir", "Log Out"])
     elif st.session_state.user_role == "Operator":
         sub_menu = st.sidebar.radio("Menu Operator", ["Dashboard Operator", "Upload Artefak", "Riwayat Revisi", "Log Out"])
     else:
@@ -225,7 +220,6 @@ if sub_menu in ["Beranda Publik", "Log Out"]:
         st.markdown("<div class='hero-h1'>GIPANG <span>M3</span> BANTEN</div>", unsafe_allow_html=True)
         st.markdown("<div class='hero-sub'>Gerakan Inovatif Pendampingan Memantau, Mengevaluasi, Menilai Bantuan Teknologi</div>", unsafe_allow_html=True)
         st.markdown("<div class='hero-desc'>Platform digital untuk memudahkan pengawas sekolah dalam mengumpulkan, memantau, mengevaluasi, dan menilai portofolio artefak dari sekolah binaan secara transparan, dan terstruktur.</div>", unsafe_allow_html=True)
-        
     with col_hero2:
         st.markdown("""<div class='mockup-container'><div style='background: white; border: 12px solid #1e293b; border-bottom-width: 24px; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(11,31,82,0.25); overflow: hidden;'><div style='background: #f8fafc; padding: 12px; text-align: left; font-size: 11px; border-bottom: 1px solid #e2e8f0; font-weight: 600;'>📊 Dashboard Workspace - Pengawas Sekolah Banten</div><div style='padding: 20px; background: white; height: 210px; text-align: left;'><div style='display: flex; gap: 10px; margin-bottom: 15px;'><div style='flex:1; background:#eff6ff; padding: 10px; border-radius: 8px; border-left: 4px solid #1D4ED8;'><small style='color:#64748b;'>Sekolah Binaan</small><br><b style='font-size: 16px; color:#0B1F52;'>24</b></div><div style='flex:1; background:#f0fdf4; padding: 10px; border-radius: 8px; border-left: 4px solid #10b981;'><small style='color:#64748b;'>Diterima</small><br><b style='font-size: 16px; color:#065f46;'>156</b></div></div></div></div></div>""", unsafe_allow_html=True)
 
@@ -261,18 +255,68 @@ if sub_menu in ["Beranda Publik", "Log Out"]:
 # ==========================================
 # 6. KONTEN PRIVATE BEDA ROLE
 # ==========================================
+
+# ----------------- AREA ADMIN -----------------
 elif sub_menu == "Dashboard Admin":
     st.title(f"📊 Panel Kontrol Utama Pengawas")
     st.markdown(f"Selamat bertugas kembali, **{st.session_state.user_name}**.")
 
+# FITUR BARU 1: VALIDASI AKUN
+elif sub_menu == "Validasi Akun Baru":
+    st.title("🛡️ Validasi & Persetujuan Akun Sekolah")
+    st.write("Daftar pengguna yang baru mendaftar dan menunggu persetujuan Anda untuk bisa login.")
+    
+    df_users = load_data("User")
+    if not df_users.empty:
+        df_pending = df_users[df_users['Status_Akun'] == 'Pending']
+        if not df_pending.empty:
+            st.dataframe(df_pending[['Nama_Lengkap', 'Asal_Sekolah', 'Role', 'Email']], use_container_width=True)
+            
+            with st.form("form_setujui"):
+                email_pilihan = st.selectbox("Pilih Email yang Ingin Disetujui (Diaktifkan)", df_pending['Email'].tolist())
+                if st.form_submit_button("✅ Setujui & Aktifkan Akun"):
+                    try:
+                        sheet_users = client.open(NAMA_SPREADSHEET).worksheet("User")
+                        # Mencari baris yang mengandung email tersebut
+                        cell = sheet_users.find(email_pilihan)
+                        if cell:
+                            # Kolom F adalah kolom ke-6
+                            sheet_users.update_cell(cell.row, 6, "Aktif")
+                            st.success(f"Akun dengan email {email_pilihan} berhasil DIAKTIFKAN!")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Gagal mengupdate status di Google Sheets: {e}")
+        else:
+            st.info("✅ Tidak ada akun baru yang menunggu validasi. Semua sudah Aktif.")
+    else:
+        st.info("Database User kosong.")
+
+# FITUR BARU 2: BUAT TAGIHAN TUGAS
+elif sub_menu == "Manajemen Tagihan Tugas":
+    st.title("📋 Pembuatan & Distribusi Tugas")
+    st.write("Tugas yang Anda buat di sini akan otomatis muncul di menu Upload sekolah binaan.")
+    
+    with st.form("form_buat_tugas"):
+        nama_tugas = st.text_input("Nama/Judul Tugas")
+        kategori_tugas = st.selectbox("Kategori", ["Manajerial", "Akademik", "Administrasi"])
+        batas_waktu = st.date_input("Batas Waktu Pengumpulan")
+        deskripsi = st.text_area("Deskripsi / Petunjuk Pengerjaan")
+        
+        if st.form_submit_button("Terbitkan Tugas ke Sekolah", type="primary"):
+            if nama_tugas and client:
+                sheet_tagihan = client.open(NAMA_SPREADSHEET).worksheet("Tagihan_Tugas")
+                sheet_tagihan.append_row([nama_tugas, kategori_tugas, batas_waktu.strftime("%d %B %Y"), deskripsi])
+                st.success("Tugas berhasil diterbitkan dan siap dikerjakan sekolah binaan!")
+                st.balloons()
+            else:
+                st.error("Mohon isi Nama Tugas terlebih dahulu.")
+
 elif sub_menu == "Upload Materi Pusat":
     st.title("📤 Publikasi Materi Instruksional Pusat")
-    
     with st.form("form_materi"):
         judul_materi = st.text_input("Judul Materi")
         kategori_materi = st.selectbox("Kategori", ["Regulasi", "Modul Ajar", "Template"])
         file_materi = st.file_uploader("Upload File")
-        
         if st.form_submit_button("Publikasikan ke Website"):
             if judul_materi and file_materi and client:
                 sheet_materi = client.open(NAMA_SPREADSHEET).worksheet("Materi_Publik")
@@ -280,17 +324,30 @@ elif sub_menu == "Upload Materi Pusat":
                 ukuran = f"{round(file_materi.size / (1024*1024), 2)} MB"
                 sheet_materi.append_row([judul_materi, kategori_materi, tgl, ukuran, "🆕"])
                 st.success("Berhasil tersimpan ke Google Sheets! Silakan cek Beranda Publik.")
-                st.balloons()
-            else:
-                st.error("Gagal! Pastikan file dipilih dan koneksi terhubung.")
 
-elif sub_menu == "Dashboard Kepala Sekolah":
-    st.title(f"🏛️ Ruang Kerja Manajerial")
+# ----------------- AREA SEKOLAH (KEPSEK & OPS) -----------------
+elif sub_menu in ["Dashboard Kepala Sekolah", "Dashboard Operator"]:
+    st.title(f"🏛️ Ruang Kerja: {st.session_state.user_role}")
     st.markdown(f"Selamat datang, **{st.session_state.user_name}**.")
-
-elif sub_menu == "Dashboard Operator":
-    st.title(f"🔧 Ruang Teknis Operator")
-    st.markdown(f"Selamat bekerja, **{st.session_state.user_name}**.")
+    
+    # LOGIKA PROGRESS BAR (MENGHITUNG TUGAS SELESAI)
+    st.markdown("### 📈 Progres Pemenuhan Administrasi")
+    
+    df_tagihan = load_data("Tagihan_Tugas")
+    total_tagihan = len(df_tagihan) if not df_tagihan.empty else 0
+    
+    df_artefak = load_data("Artefak_Portofolio")
+    dikumpulkan = 0
+    if not df_artefak.empty and total_tagihan > 0:
+        # Menghitung berapa dokumen yang nama sekolahnya cocok dengan user yang sedang login
+        dikumpulkan = len(df_artefak[df_artefak['Nama_Sekolah'] == st.session_state.user_name])
+    
+    if total_tagihan > 0:
+        persentase = min(dikumpulkan / total_tagihan, 1.0)
+        st.progress(persentase)
+        st.write(f"**Terkumpul:** {dikumpulkan} dari {total_tagihan} Tagihan Tugas ({int(persentase*100)}%)")
+    else:
+        st.info("Belum ada tagihan tugas dari Pengawas.")
 
 elif sub_menu == "Upload Artefak":
     st.title("📤 Unggah Berkas Komponen Mutu")
