@@ -951,7 +951,7 @@ else:
                         st.link_button("⬇️ Download Materi", link_dl, use_container_width=True)
                     else:
                         st.button("⚠️ Link Belum Tersedia", disabled=True, use_container_width=True)
-else:
+    else:
         st.info("Belum ada materi publik.")
 
     # ==========================================
