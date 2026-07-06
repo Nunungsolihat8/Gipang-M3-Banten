@@ -974,17 +974,17 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    else:
+else:
     # PRIVATE VIEW
-st.sidebar.markdown(f"""
+    st.sidebar.markdown(f"""
 
-## 👋 Halo
+    ## 👋 Halo
 
-**{st.session_state.user_name}**
+    **{st.session_state.user_name}**
 
-🏫 {st.session_state.asal_sekolah}
+    🏫 {st.session_state.asal_sekolah}
 
-🔹 {st.session_state.user_role}
+    🔹 {st.session_state.user_role}
 
 """)
 
