@@ -450,9 +450,9 @@ def email_exists(email):
 
 if not st.session_state.logged_in:
 
-    # ==========================
+    # ==========================================
     # LOAD DATA LANDING PAGE
-    # ==========================
+    # ==========================================
 
     df_gal = load_data("Galeri_Portofolio")
     df_user = load_data("User")
@@ -462,7 +462,7 @@ if not st.session_state.logged_in:
     total_art = 0
     total_galeri = 0
 
-    if not df_user.empty:
+    if not df_user.empty and "Asal_Sekolah" in df_user.columns:
         total_sekolah = len(df_user["Asal_Sekolah"].unique())
 
     if not df_art.empty:
@@ -471,488 +471,510 @@ if not st.session_state.logged_in:
     if not df_gal.empty:
         total_galeri = len(df_gal)
 
-   # NAVBAR
-st.markdown("""
-....navbar....
-""", unsafe_allow_html=True)
-
-# =====================================
-# LOGIN
-# =====================================
-
-if st.session_state.show_login:
-
-    with st.container(border=True):
-
-        st.subheader("🔐 Login Workspace")
-
-        email = st.text_input("Email")
-
-        password = st.text_input(
-            "Password",
-            type="password"
-        )
-
-        c1,c2 = st.columns(2)
-
-        login = c1.button("Login")
-
-        cancel = c2.button("Batal")
-
-        if cancel:
-            st.session_state.show_login = False
-            st.rerun()
-
-        if login:
-
-            df=load_data("User")
-
-            if df.empty:
-
-                st.error("Database kosong.")
-
-            else:
-
-                email=email.lower().strip()
-
-                password=hash_password(password)
-
-                df["Email"]=df["Email"].str.lower()
-
-                user=df[
-                    (df["Email"]==email)
-                    &
-                    (df["Password"]==password)
-                ]
-
-                if user.empty:
-
-                    st.error("Email atau Password salah.")
-
-                else:
-
-                    if user.iloc[0]["Status_Akun"]!="Aktif":
-
-                        st.warning("Akun masih menunggu persetujuan.")
-
-                    else:
-
-                        st.session_state.logged_in=True
-
-                        st.session_state.user_name=user.iloc[0]["Nama_Lengkap"]
-
-                        st.session_state.user_role=user.iloc[0]["Role"]
-
-                        st.session_state.asal_sekolah=user.iloc[0]["Asal_Sekolah"]
-
-                        st.success("Login berhasil.")
-
-                        st.rerun()
-
-    # --- POPUP REGISTER ---
-    if st.session_state.show_register:
-     with st.container(border=True):
-
-        st.subheader("🚀 Request Akses")
-
-        with st.form("register"):
-
-            nama=st.text_input(
-                "Nama Lengkap"
-            )
-
-            sekolah=st.text_input(
-                "Asal Sekolah"
-            )
-
-            email=st.text_input(
-                "Email"
-            )
-
-            role=st.selectbox(
-
-                "Role",
-
-                [
-
-                    "Operator",
-
-                    "Kepala Sekolah"
-
-                ]
-
-            )
-
-            password=st.text_input(
-
-                "Password",
-
-                type="password"
-
-            )
-
-            submit=st.form_submit_button(
-
-                "Daftar"
-
-            )
-
-            if submit:
-
-                if "" in [
-
-                    nama,
-
-                    sekolah,
-
-                    email,
-
-                    password
-
-                ]:
-
-                    st.error("Lengkapi seluruh data.")
-
-                elif not valid_email(email):
-
-                    st.error("Format email tidak valid.")
-
-                elif email_exists(email):
-
-                    st.error("Email sudah digunakan.")
-
-                elif len(password)<8:
-
-                    st.error("Password minimal 8 karakter.")
-
-                else:
-
-                    besar=any(c.isupper() for c in password)
-
-                    kecil=any(c.islower() for c in password)
-
-                    angka=any(c.isdigit() for c in password)
-
-                    if not all([besar,kecil,angka]):
-
-                        st.error(
-
-                            "Password harus memiliki huruf besar, huruf kecil, dan angka."
-
-                        )
-
-                    else:
-
-                        append_row(
-
-                            "User",
-
-                            [
-
-                                nama,
-
-                                sekolah,
-
-                                email,
-
-                                role,
-
-                                hash_password(password),
-
-                                "Pending"
-
-                            ]
-
-                        )
-
-                        st.success(
-
-                            "Pendaftaran berhasil."
-
-                        )
-
-                        st.balloons()
-
-                        st.session_state.show_register=False
-
-                        st.rerun()
-
-    # --- HERO SECTION ---
-    st.markdown("<hr>", unsafe_allow_html=True)
-
-left,right=st.columns([1.2,.8])
-
-with left:
+    # ==========================================
+    # NAVBAR
+    # ==========================================
 
     st.markdown("""
-<div class='hero-badge'>
-🚀 Platform Digital Pengawas Sekolah
-</div>
+    ....navbar....
+    """, unsafe_allow_html=True)
 
-<div class='hero-title'>
-GIPANG <span class='hero-blue'>M3</span> BANTEN
-</div>
+    # ==========================================
+    # LOGIN
+    # ==========================================
 
-<div class='hero-desc'>
-Gerakan Inovatif Pendampingan Memantau,
-Mengevaluasi,
-Menilai Bantuan Teknologi.
-
-Platform modern untuk membantu Pengawas Sekolah,
-Kepala Sekolah,
-dan Operator mengelola portofolio digital.
-</div>
-""", unsafe_allow_html=True)
-
-    c1,c2=st.columns(2)
-
-    with c1:
-        if st.button("🚀 Request Akses",use_container_width=True):
-            st.session_state.show_register=True
-            st.rerun()
-
-    with c2:
-        if st.button("🔐 Login",use_container_width=True):
-            st.session_state.show_login=True
-            st.rerun()
-
-with right:
-
-    st.image(
-        "https://images.unsplash.com/photo-1552664730-d307ca884978?w=900",
-        use_container_width=True
-    )
-
-st.markdown("<br>",unsafe_allow_html=True)
-
-a,b,c=st.columns(3)
-
-with a:
-
-    st.markdown(f"""
-
-<div class="metric-card">
-
-<div class="metric-value">
-
-{total_sekolah}
-
-</div>
-
-<div class="metric-label">
-
-Sekolah Terdaftar
-
-</div>
-
-</div>
-
-""",unsafe_allow_html=True)
-
-with b:
-
-    st.markdown(f"""
-
-<div class="metric-card">
-
-<div class="metric-value">
-
-{total_art}
-
-</div>
-
-<div class="metric-label">
-
-Artefak Masuk
-
-</div>
-
-</div>
-
-""",unsafe_allow_html=True)
-
-with c:
-
-    st.markdown(f"""
-
-<div class="metric-card">
-
-<div class="metric-value">
-
-{total_galeri}
-
-</div>
-
-<div class="metric-label">
-
-Dokumentasi
-
-</div>
-
-</div>
-
-""",unsafe_allow_html=True)
-
-    st.markdown("## ✨ Fitur Unggulan")
-
-c1,c2,c3=st.columns(3)
-
-fitur=[
-
-("📂","Upload Artefak","Pengumpulan dokumen sekolah secara digital."),
-
-("📷","Galeri Kegiatan","Dokumentasi kegiatan sekolah."),
-
-("📊","Monitoring","Validasi dan evaluasi real-time.")
-
-]
-
-for col,data in zip([c1,c2,c3],fitur):
-
-    with col:
-
-        st.markdown(f"""
-
-<div class="feature-card">
-
-<h1>{data[0]}</h1>
-
-<h4>{data[1]}</h4>
-
-<p>{data[2]}</p>
-
-</div>
-
-""",unsafe_allow_html=True)
-
-    # --- PERBAIKAN GALERI FOTO (MENGGUNAKAN ST.IMAGE ANTI ERROR) ---
-    st.markdown("""
-<div id='portofolio'></div>
-
-<br>
-
-<hr>
-
-<h3>📸 Galeri Portofolio Kegiatan</h3>
-
-""",unsafe_allow_html=True)
-
-df_gal=load_data("Galeri_Portofolio")
-
-if df_gal.empty:
-
-    st.markdown("""
-
-<div style='
-
-padding:40px;
-
-text-align:center;
-
-border:1px dashed #CBD5E1;
-
-border-radius:18px;
-
-background:#F8FAFC;
-
-'>
-
-<h2>📸</h2>
-
-<h4>Belum Ada Dokumentasi</h4>
-
-Silakan upload kegiatan sekolah pertama Anda.
-
-</div>
-
-""",unsafe_allow_html=True)
-
-else:
-
-    for _,row in df_gal.iterrows():
-
-        photos=get_photo_list(row)
+    if st.session_state.show_login:
 
         with st.container(border=True):
 
-            st.subheader(
-                row.get(
-                    "Asal_Sekolah",
-                    "-"
-                )
+            st.subheader("🔐 Login Workspace")
+
+            email = st.text_input("Email")
+
+            password = st.text_input(
+                "Password",
+                type="password"
             )
 
-            st.caption(
-                row.get(
-                    "Deskripsi_Kegiatan",
-                    "-"
-                )
+            col1, col2 = st.columns(2)
+
+            login = col1.button(
+                "Login",
+                use_container_width=True
             )
 
-            total=len(photos)
+            batal = col2.button(
+                "Batal",
+                use_container_width=True
+            )
 
-            if total==1:
+            if batal:
 
-                st.image(
-                    photos[0],
-                    use_container_width=True
-                )
+                st.session_state.show_login = False
 
-            elif total==2:
+                st.rerun()
 
-                c1,c2=st.columns(2)
+            if login:
 
-                c1.image(
-                    photos[0],
-                    use_container_width=True
-                )
+                df = load_data("User")
 
-                c2.image(
-                    photos[1],
-                    use_container_width=True
-                )
+                if df.empty:
 
-            elif total>=3:
+                    st.error("Database User kosong.")
 
-                c1,c2,c3=st.columns(3)
+                else:
 
-                c1.image(
-                    photos[0],
-                    use_container_width=True
-                )
+                    email = email.lower().strip()
 
-                c2.image(
-                    photos[1],
-                    use_container_width=True
-                )
+                    password = hash_password(password)
 
-                c3.image(
-                    photos[2],
-                    use_container_width=True
-                )
+                    df["Email"] = df["Email"].astype(str).str.lower().str.strip()
 
-            st.divider()
+                    user = df[
+                        (df["Email"] == email)
+                        &
+                        (df["Password"] == password)
+                    ]
 
-    # --- PERBAIKAN TOMBOL DOWNLOAD MATERI ---
-    st.markdown("<div id='materi'></div><br><hr style='opacity:0.5;'><br><h4>📥 Pusat Download Materi Publik</h4>", unsafe_allow_html=True)
-    df_mat = load_data("Materi_Publik")
-    if not df_mat.empty and 'Judul' in df_mat.columns:
-        mat_cols = st.columns(3)
-        for idx, (_, row) in enumerate(df_mat.iterrows()):
-            with mat_cols[idx % 3]:
-                with st.container(border=True):
-                    st.markdown(f"### {row.get('Icon', '📄')} {row.get('Judul', '')}")
-                    st.write(f"🏷️ {row.get('Kategori', '')} | 📅 {row.get('Tanggal', '')}")
-                    
-                    # Link Button Asli Streamlit (Pasti Merespon)
-                    link_dl = str(row.get('Link_Download', '')).strip()
-                    if link_dl and link_dl != "nan":
-                        if not link_dl.startswith('http'): link_dl = 'https://' + link_dl
-                        st.link_button("⬇️ Download Materi", link_dl, use_container_width=True)
+                    if user.empty:
+
+                        st.error("Email atau Password salah.")
+
                     else:
-                        st.button("⚠️ Link Belum Tersedia", disabled=True, use_container_width=True)
+
+                        if user.iloc[0]["Status_Akun"] != "Aktif":
+
+                            st.warning(
+                                "Akun masih menunggu persetujuan Admin."
+                            )
+
+                        else:
+
+                            st.session_state.logged_in = True
+
+                            st.session_state.user_name = user.iloc[0]["Nama_Lengkap"]
+
+                            st.session_state.user_role = user.iloc[0]["Role"]
+
+                            st.session_state.asal_sekolah = user.iloc[0]["Asal_Sekolah"]
+
+                            st.success("Login berhasil.")
+
+                            st.rerun()
+
+    # ==========================================
+    # REGISTER
+    # ==========================================
+
+    if st.session_state.show_register:
+
+        with st.container(border=True):
+
+            st.subheader("🚀 Request Akses")
+
+            with st.form("register_form"):
+
+                nama = st.text_input("Nama Lengkap")
+
+                sekolah = st.text_input("Asal Sekolah")
+
+                email = st.text_input("Email")
+
+                role = st.selectbox(
+                    "Role",
+                    [
+                        "Operator",
+                        "Kepala Sekolah"
+                    ]
+                )
+
+                password = st.text_input(
+                    "Password",
+                    type="password"
+                )
+
+                submit = st.form_submit_button(
+                    "Daftar"
+                )
+
+                if submit:
+
+                    if "" in [nama, sekolah, email, password]:
+
+                        st.error("Lengkapi seluruh data.")
+
+                    elif not valid_email(email):
+
+                        st.error("Format email tidak valid.")
+
+                    elif email_exists(email):
+
+                        st.error("Email sudah digunakan.")
+
+                    elif len(password) < 8:
+
+                        st.error(
+                            "Password minimal 8 karakter."
+                        )
+
+                    else:
+
+                        besar = any(c.isupper() for c in password)
+                        kecil = any(c.islower() for c in password)
+                        angka = any(c.isdigit() for c in password)
+
+                        if not all([besar, kecil, angka]):
+
+                            st.error(
+                                "Password harus memiliki huruf besar, huruf kecil, dan angka."
+                            )
+
+                        else:
+
+                            append_row(
+
+                                "User",
+
+                                [
+
+                                    nama,
+
+                                    sekolah,
+
+                                    email,
+
+                                    role,
+
+                                    hash_password(password),
+
+                                    "Pending"
+
+                                ]
+
+                            )
+
+                            st.success(
+                                "Pendaftaran berhasil."
+                            )
+
+                            st.balloons()
+
+                            st.session_state.show_register = False
+
+                            st.rerun()
+
+        # ==========================================
+    # HERO SECTION
+    # ==========================================
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    left, right = st.columns([1.2, 0.8])
+
+    with left:
+
+        st.markdown("""
+        <div class='hero-badge'>
+        🚀 Platform Digital Pengawas Sekolah
+        </div>
+
+        <div class='hero-title'>
+        GIPANG <span class='hero-blue'>M3</span> BANTEN
+        </div>
+
+        <div class='hero-desc'>
+        Gerakan Inovatif Pendampingan Memantau,
+        Mengevaluasi,
+        Menilai Bantuan Teknologi.
+
+        Platform digital untuk membantu Pengawas,
+        Kepala Sekolah,
+        dan Operator mengelola portofolio sekolah
+        secara modern, efisien, dan transparan.
+        </div>
+        """, unsafe_allow_html=True)
+
+        btn1, btn2 = st.columns(2)
+
+        with btn1:
+
+            if st.button(
+                "🚀 Request Akses",
+                use_container_width=True
+            ):
+
+                st.session_state.show_register = True
+                st.rerun()
+
+        with btn2:
+
+            if st.button(
+                "🔐 Login",
+                use_container_width=True
+            ):
+
+                st.session_state.show_login = True
+                st.rerun()
+
+    with right:
+
+        st.image(
+            "https://images.unsplash.com/photo-1552664730-d307ca884978?w=1200",
+            use_container_width=True
+        )
+
+    # ==========================================
+    # STATISTIK
+    # ==========================================
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{total_sekolah}</div>
+            <div class="metric-label">Sekolah Terdaftar</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{total_art}</div>
+            <div class="metric-label">Artefak Masuk</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c3:
+
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{total_galeri}</div>
+            <div class="metric-label">Dokumentasi</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # ==========================================
+    # FITUR
+    # ==========================================
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown("## ✨ Fitur Unggulan")
+
+    col1, col2, col3 = st.columns(3)
+
+    fitur = [
+
+        (
+            "📂",
+            "Upload Artefak",
+            "Pengumpulan portofolio sekolah secara digital."
+        ),
+
+        (
+            "📸",
+            "Galeri Kegiatan",
+            "Publikasi dokumentasi kegiatan sekolah."
+        ),
+
+        (
+            "📊",
+            "Monitoring",
+            "Monitoring dan validasi oleh Pengawas secara real-time."
+        )
+
+    ]
+
+    for col, item in zip([col1, col2, col3], fitur):
+
+        with col:
+
+            st.markdown(f"""
+            <div class="feature-card">
+
+            <h1>{item[0]}</h1>
+
+            <h4>{item[1]}</h4>
+
+            <p>{item[2]}</p>
+
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+       # ==========================================
+    # GALERI PORTOFOLIO
+    # ==========================================
+
+    st.markdown("""
+    <div id='portofolio'></div>
+
+    <br>
+
+    <hr>
+
+    <h3>📸 Galeri Portofolio Kegiatan</h3>
+
+    """, unsafe_allow_html=True)
+
+    df_gal = load_data("Galeri_Portofolio")
+
+    if df_gal.empty:
+
+        st.markdown("""
+        <div style="
+        padding:40px;
+        text-align:center;
+        border:1px dashed #CBD5E1;
+        border-radius:18px;
+        background:#F8FAFC;
+        ">
+
+        <h2>📸</h2>
+
+        <h4>Belum Ada Dokumentasi</h4>
+
+        Silakan upload kegiatan sekolah pertama Anda.
+
+        </div>
+        """, unsafe_allow_html=True)
+
     else:
-        st.info("Belum ada materi publik.")
+
+        for _, row in df_gal.iterrows():
+
+            photos = get_photo_list(row)
+
+            with st.container(border=True):
+
+                st.subheader(
+                    row.get("Asal_Sekolah", "-")
+                )
+
+                st.caption(
+                    row.get("Deskripsi_Kegiatan", "-")
+                )
+
+                if len(photos) == 1:
+
+                    st.image(
+                        photos[0],
+                        use_container_width=True
+                    )
+
+                elif len(photos) == 2:
+
+                    c1, c2 = st.columns(2)
+
+                    with c1:
+                        st.image(
+                            photos[0],
+                            use_container_width=True
+                        )
+
+                    with c2:
+                        st.image(
+                            photos[1],
+                            use_container_width=True
+                        )
+
+                elif len(photos) >= 3:
+
+                    c1, c2, c3 = st.columns(3)
+
+                    with c1:
+                        st.image(
+                            photos[0],
+                            use_container_width=True
+                        )
+
+                    with c2:
+                        st.image(
+                            photos[1],
+                            use_container_width=True
+                        )
+
+                    with c3:
+                        st.image(
+                            photos[2],
+                            use_container_width=True
+                        )
+
+                st.divider()
+
+    # ==========================================
+    # MATERI PUBLIK
+    # ==========================================
+
+    st.markdown("""
+    <div id='materi'></div>
+
+    <br>
+
+    <hr>
+
+    <h3>📥 Pusat Download Materi Publik</h3>
+
+    """, unsafe_allow_html=True)
+
+    df_mat = load_data("Materi_Publik")
+
+    if not df_mat.empty and "Judul" in df_mat.columns:
+
+        cols = st.columns(3)
+
+        for i, (_, row) in enumerate(df_mat.iterrows()):
+
+            with cols[i % 3]:
+
+                with st.container(border=True):
+
+                    st.markdown(
+                        f"### {row.get('Icon','📄')} {row.get('Judul','')}"
+                    )
+
+                    st.write(
+                        f"🏷️ {row.get('Kategori','')} | 📅 {row.get('Tanggal','')}"
+                    )
+
+                    link = str(
+                        row.get(
+                            "Link_Download",
+                            ""
+                        )
+                    ).strip()
+
+                    if link != "" and link.lower() != "nan":
+
+                        if not link.startswith("http"):
+
+                            link = "https://" + link
+
+                        st.link_button(
+                            "⬇ Download Materi",
+                            link,
+                            use_container_width=True
+                        )
+
+                    else:
+
+                        st.button(
+                            "⚠ Link Belum Tersedia",
+                            disabled=True,
+                            use_container_width=True
+                        )
+
+    else:
+
+        st.info(
+            "Belum ada materi publik."
+        )
 
     # ==========================================
     # CTA
@@ -961,30 +983,49 @@ else:
     st.markdown("<br><br>", unsafe_allow_html=True)
 
     st.info("""
-    🚀 **Siap bergabung bersama GIPANG M3 BANTEN?**
-    """)
+
+🚀 **Siap bergabung bersama GIPANG M3 BANTEN?**
+
+Kelola portofolio sekolah secara digital,
+lebih cepat,
+lebih aman,
+dan lebih transparan.
+
+""")
 
     # ==========================================
     # FOOTER
     # ==========================================
 
     st.markdown("""
-    <div class="footer">
-    ...
-    </div>
-    """, unsafe_allow_html=True)
+
+<div class="footer">
+
+© 2026 GIPANG M3 BANTEN
+
+Gerakan Inovatif Pendampingan Memantau,
+Mengevaluasi,
+Menilai Bantuan Teknologi
+
+</div>
+
+""", unsafe_allow_html=True)
+
+# ==========================================
+# PRIVATE VIEW
+# ==========================================
 
 else:
-    # PRIVATE VIEW
+
     st.sidebar.markdown(f"""
 
-    ## 👋 Halo
+## 👋 Halo
 
-    **{st.session_state.user_name}**
+**{st.session_state.user_name}**
 
-    🏫 {st.session_state.asal_sekolah}
+🏫 {st.session_state.asal_sekolah}
 
-    🔹 {st.session_state.user_role}
+🔹 {st.session_state.user_role}
 
 """)
 
@@ -1224,9 +1265,9 @@ if total_art>0:
     )
 
 #STATISTIK STATUS
-st.markdown("### Ringkasan Status")
+    st.markdown("<br>", unsafe_allow_html=True)
 
-a,b,c=st.columns(3)
+    a,b,c = st.columns(3)
 
 a.success(f"✅ {disetujui}")
 
