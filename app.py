@@ -974,7 +974,7 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-else:
+    else:
     # PRIVATE VIEW
 st.sidebar.markdown(f"""
 
