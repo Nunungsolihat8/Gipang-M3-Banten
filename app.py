@@ -88,18 +88,16 @@ def upload_to_imgbb(image_file):
         return "", "Error Upload"
     except: return "", "Error"
 
-# ENGINE PENGAMAN: MENYALIN FILE FISIK OPERATOR SECARA PERMANEN KE GOOGLE DRIVE ADMIN
+# BACKUP ENGINE: MENYALIN FILE FISIK OPERATOR SECARA PERMANEN KE GOOGLE DRIVE ADMIN (ANTI-HAPUS)
 def upload_to_admin_drive(file_obj):
     try:
         import ast
         kunci_mentah = st.secrets["gcp"]["kunci_json"]
         try: creds_dict = json.loads(kunci_mentah, strict=False)
         except: creds_dict = ast.literal_eval(kunci_mentah.replace('\n', ''))
-        
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         token = creds.get_access_token().access_token
-        
         headers = {"Authorization": f"Bearer {token}"}
         metadata = {
             "name": f"ARSIP_{st.session_state.asal_sekolah.replace(' ', '_')}_{file_obj.name}",
@@ -109,12 +107,10 @@ def upload_to_admin_drive(file_obj):
             'data': ('metadata', json.dumps(metadata), 'application/json; charset=UTF-8'),
             'file': (file_obj.name, file_obj.getvalue(), file_obj.type)
         }
-        
         r = requests.post("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", headers=headers, files=files)
         if r.status_code == 200:
             file_id = r.json().get("id")
-            perm_url = f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions"
-            requests.post(perm_url, headers=headers, json={"role": "reader", "type": "anyone"})
+            requests.post(f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions", headers=headers, json={"role": "reader", "type": "anyone"})
             return f"https://drive.google.com/uc?id={file_id}"
     except: pass
     return ""
@@ -133,7 +129,7 @@ def auto_convert_drive_url(url):
     return url
 
 # ==========================================
-# 3. PUBLIC VIEW (BERANDA & AUTENTIKASI)
+# 3. PUBLIC VIEW (BERANDA UTAMA)
 # ==========================================
 if not st.session_state.logged_in:
     st.markdown("<div id='beranda'></div>", unsafe_allow_html=True)
@@ -196,6 +192,7 @@ if not st.session_state.logged_in:
                                 client.open(NAMA_SPREADSHEET).worksheet("User").append_row([r_nama, r_sek, r_em, r_role, r_pass, "Pending"])
                                 st.success("✅ Pendaftaran Berhasil! Menunggu validasi Admin.")
 
+    # --- SINKRONISASI METRIK DESAIN ---
     df_usr_hero = load_data("User")
     jml_sekolah = df_usr_hero[(df_usr_hero['Status_Akun'] == 'Aktif') & (df_usr_hero['Role'] != 'Admin')]['Asal_Sekolah'].nunique() if not df_usr_hero.empty else 0
     df_art_hero = load_data("Artefak_Portofolio")
@@ -248,7 +245,9 @@ if not st.session_state.logged_in:
                     st.link_button("⬇️ Download Materi", link_dl, use_container_width=True)
 
 else:
-    # ---------------- PRIVATE VIEW (WORKSPACE SYSTEM) ----------------
+    # ==========================================
+    # 4. PRIVATE WORKSPACE (SINKRONISASI PERMANEN)
+    # ==========================================
     st.sidebar.markdown(f"""
         <div style='background-color: #f0fdf4; padding: 12px; border-radius: 8px; border: 1px solid #bbf7d0; margin-bottom: 15px;'>
             <small style='color: #166534; font-weight: 600;'>🔑 USER LOGIN:</small><br>
@@ -267,31 +266,30 @@ else:
 
     if menu == "🚪 Keluar": st.session_state.logged_in = False; st.rerun()
 
-    # --- [A] UPLOAD GALERI ---
+    # --- ROUTING LOGIK MANAJEMEN PRIVATE ---
+    
     if menu == "Upload Galeri Kegiatan":
         st.title("📸 Upload Dokumentasi Foto Kegiatan")
         with st.container(border=True):
-            metode = st.radio("Metode Input Gambar:", ["📂 Unggah File (JPG/PNG)", "🔗 Gunakan Link Google Drive"])
+            metode = st.radio("Metode Gambar:", ["📂 Unggah File (JPG/PNG)", "🔗 Gunakan Link Google Drive"])
             desc = st.text_input("Judul / Deskripsi Singkat Kegiatan")
             if metode == "📂 Unggah File (JPG/PNG)":
                 fotos = st.file_uploader("Pilih Maks 3 File (@2MB)", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
                 if st.button("🚀 Publish Kegiatan", type="primary"):
                     if desc and fotos and len(fotos) <= 3 and all(f.size <= 2*1024*1024 for f in fotos):
-                        with st.spinner("Mengunggah aman..."):
+                        with st.spinner("Mengunggah..."):
                             urls = [upload_to_imgbb(f)[0] for f in fotos if upload_to_imgbb(f)[0]]
                             while len(urls) < 3: urls.append("")
                             client.open(NAMA_SPREADSHEET).worksheet("Galeri_Portofolio").append_row([datetime.datetime.now().strftime("%Y-%m-%d"), st.session_state.asal_sekolah, desc, urls[0], urls[1], urls[2]])
-                            st.success("🎉 Foto berhasil tayang di Galeri Publik!")
+                            st.success("🎉 Berhasil Tayang di Galeri!")
             else:
                 l1 = st.text_input("Link Foto Utama (Wajib)")
-                l2 = st.text_input("Link Foto 2")
-                l3 = st.text_input("Link Foto 3")
+                l2 = st.text_input("Link Foto 2"); l3 = st.text_input("Link Foto 3")
                 if st.button("🚀 Publish Tautan", type="primary"):
                     if desc and l1:
                         client.open(NAMA_SPREADSHEET).worksheet("Galeri_Portofolio").append_row([datetime.datetime.now().strftime("%Y-%m-%d"), st.session_state.asal_sekolah, desc, auto_convert_drive_url(l1), auto_convert_drive_url(l2), auto_convert_drive_url(l3)])
-                        st.success("🎉 Tautan berhasil disematkan!")
+                        st.success("🎉 Tautan tersemat!")
 
-    # --- [B] FITUR ADMIN (PENGAWAS BANTEN) ---
     elif menu == "Dashboard Admin":
         st.title("📊 Panel Kontrol Utama Pengawas")
         df_usr_adm = load_data("User")
@@ -328,10 +326,8 @@ else:
                     if st.form_submit_button("Simpan Keputusan", type="primary"):
                         ts, sek = baris.split(" | ")[0], baris.split(" | ")[1]
                         sheet_art = client.open(NAMA_SPREADSHEET).worksheet("Artefak_Portofolio")
-                        raw = sheet_art.get_all_values()
-                        for i, row in enumerate(raw):
-                            if i == 0: continue
-                            if str(row[0]).strip() == ts and str(row[1]).strip() == sek:
+                        for i, row in enumerate(sheet_art.get_all_values()):
+                            if i > 0 and str(row[0]).strip() == ts and str(row[1]).strip() == sek:
                                 sheet_art.update_cell(i + 1, 5, stat_baru); sheet_art.update_cell(i + 1, 6, catatan)
                                 st.success("Keputusan tersimpan!"); st.rerun()
             st.markdown("### 🗄️ Arsip Administratif (Dokumen Disetujui)")
@@ -352,7 +348,7 @@ else:
                         sheet_j = client.open(NAMA_SPREADSHEET).worksheet("Jadwal_Pendampingan")
                         for i, row in enumerate(sheet_j.get_all_values()):
                             if i > 0 and str(row[0]).strip() == ts:
-                                sheet_j.update_cell(i + 1, 5, keputusan); st.success("Jadwal Berhasil Diperbarui!"); st.rerun()
+                                sheet_j.update_cell(i + 1, 5, keputusan); st.success("Jadwal Diperbarui!"); st.rerun()
             st.dataframe(df_jadwal.sort_values(by='Tanggal_Booking'), use_container_width=True)
 
     elif menu == "Manajemen Galeri Publik":
@@ -365,7 +361,7 @@ else:
                     ts_gal = pilih_gal.split(" | ")[0]
                     sheet_gal = client.open(NAMA_SPREADSHEET).worksheet("Galeri_Portofolio")
                     for i, row in enumerate(sheet_gal.get_all_values()):
-                        if i > 0 and str(row[0]).strip() == ts_gal: sheet_gal.delete_rows(i + 1); st.success("Galeri dihapus!"); st.rerun()
+                        if i > 0 and str(row[0]).strip() == ts_gal: sheet_gal.delete_rows(i + 1); st.success("Dihapus!"); st.rerun()
 
     elif menu == "Sistem Reminder Email":
         st.title("🔔 Pengingat Otomatis")
@@ -378,7 +374,7 @@ else:
             s_belum = df_usr[(df_usr.get('Role', '') != 'Admin') & (df_usr.get('Status_Akun', '') == 'Aktif') & (~df_usr.get('Asal_Sekolah', '').isin(s_sudah))]
             if not s_belum.empty:
                 d_email = ",".join(s_belum['Email'].astype(str).tolist())
-                st.markdown(f'<a href="mailto:?bcc={d_email}&subject=REMINDER" target="_blank"><button style="background-color: #d93025; color: white; border: none; padding: 10px 20px; border-radius: 8px;">📧 Kirim Reminder Massal</button></a>', unsafe_allow_html=True)
+                st.markdown(f'<a href="mailto:?bcc={d_email}&subject=REMINDER" target="_blank"><button style="background-color: #d93025; color: white; border: none; padding: 10px 20px; border-radius: 8px;">📧 Kirim Email Massal</button></a>', unsafe_allow_html=True)
 
     elif menu == "Validasi Akun Baru":
         st.title("🛡️ Validasi Akun")
@@ -395,18 +391,24 @@ else:
 
     elif menu == "Manajemen Tagihan Tugas":
         st.title("📋 Pembuatan Tugas Baru")
-        with st.form("f_tugas"):
-            nt = st.text_input("Judul Tugas")
-            if st.form_submit_button("Terbitkan"):
-                if nt: client.open(NAMA_SPREADSHEET).worksheet("Tagihan_Tugas").append_row([nt, "Umum", "-", ""]); st.success("Tugas diterbitkan!")
+        with st.form("f_tugas_full"):
+            nt = st.text_input("Nama/Judul Tugas")
+            kat_t = st.selectbox("Kategori", ["Manajerial", "Akademik", "Administrasi"])
+            dl_t = st.date_input("Batas Waktu Pengumpulan")
+            ds_t = st.text_area("Deskripsi / Petunjuk")
+            if st.form_submit_button("Terbitkan Tugas Baru", type="primary"):
+                if nt: client.open(NAMA_SPREADSHEET).worksheet("Tagihan_Tugas").append_row([nt, kat_t, dl_t.strftime("%d %B %Y"), ds_t]); st.success("Tugas diterbitkan!")
 
     elif menu == "Upload Materi Pusat":
         st.title("📤 Publikasi Juknis Pusat")
-        with st.form("f_mat"):
+        with st.form("f_mat_full"):
             jm = st.text_input("Judul Materi")
-            link_dl = st.text_input("🔗 Link Dokumen Asli")
-            if st.form_submit_button("Publish Materi"):
-                if jm and link_dl: client.open(NAMA_SPREADSHEET).worksheet("Materi_Publik").append_row([jm, "Regulasi", datetime.datetime.now().strftime("%d %b %Y"), "Link Web", "🆕", link_dl]); st.success("Materi berhasil dipublikasikan!")
+            link_dl = st.text_input("🔗 Link Dokumen Google Drive (Public)")
+            f_check = st.file_uploader("📂 [Opsional] File Cek Ukuran", type=['pdf','docx','zip'])
+            if st.form_submit_button("Publish Materi Pusat"):
+                if jm and link_dl:
+                    sz = f"{round(f_check.size / (1024*1024), 2)} MB" if f_check else "Tautan Luar"
+                    client.open(NAMA_SPREADSHEET).worksheet("Materi_Publik").append_row([jm, "Regulasi", datetime.datetime.now().strftime("%d %b %Y"), sz, "🆕", link_dl]); st.success("Materi dipublikasikan!")
 
     elif menu == "Respon Konsultasi":
         st.title("💬 Jawaban Keluhan")
@@ -415,15 +417,18 @@ else:
             df_in = df_k[df_k['Status'] == 'Menunggu Respon']
             if not df_in.empty:
                 with st.form("f_resp"):
-                    pilih = st.selectbox("Pilih Keluhan", df_in.apply(lambda x: f"{x.get('Timestamp')} | {x.get('Asal_Sekolah')}", axis=1))
-                    tang = st.text_area("Tanggapan")
+                    pilih = st.selectbox("Pilih Laporan", df_in.apply(lambda x: f"{x.get('Timestamp')} | {x.get('Asal_Sekolah')} | {x.get('Topik_Keluhan')}", axis=1))
+                    tang = st.text_area("Tanggapan Pengawas")
                     if st.form_submit_button("Kirim Jawaban"):
                         ts = pilih.split(" | ")[0]
                         s_k = client.open(NAMA_SPREADSHEET).worksheet("Konsultasi_Sekolah")
                         for i, row in enumerate(s_k.get_all_values()):
-                            if i > 0 and str(row[0]).strip() == ts: s_k.update_cell(i + 1, 6, tang); s_k.update_cell(i + 1, 7, "Dijawab ✅"); st.success("Jawaban terkirim!"); st.rerun()
+                            if i > 0 and str(row[0]).strip() == ts: s_k.update_cell(i + 1, 6, tang); s_k.update_cell(i + 1, 7, "Dijawab ✅"); st.success("Terkirim!"); st.rerun()
+            st.markdown("### 🗄️ Arsip Rekam Jejak Konsultasi Selesai")
+            df_done = df_k[df_k['Status'] == 'Dijawab ✅']
+            if not df_done.empty: st.dataframe(df_done[['Timestamp', 'Asal_Sekolah', 'Topik_Keluhan', 'Detail_Pesan', 'Tanggapan_Pengawas']], use_container_width=True)
 
-    # --- [C] FITUR KEPALA SEKOLAH ---
+    # --- [C] FITUR KEPALA SEKOLAH (MEMORI ADUAN UTUH) ---
     elif menu == "Dashboard Kepala Sekolah":
         st.title(f"🏛️ Dasbor Manajerial - {st.session_state.asal_sekolah}")
         df_tag = load_data("Tagihan_Tugas")
@@ -442,8 +447,8 @@ else:
             tgl = st.date_input("Pilih Tanggal Kunjungan")
             tujuan = st.text_input("Tujuan / Agenda")
             if st.form_submit_button("Ajukan Jadwal", type="primary"):
-                if tgl.strftime("%Y-%m-%d") in booked_dates: st.error("❌ Tanggal sudah penuh!")
-                elif tujuan: client.open(NAMA_SPREADSHEET).worksheet("Jadwal_Pendampingan").append_row([datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tgl.strftime("%Y-%m-%d"), st.session_state.asal_sekolah, tujuan, "Menunggu Persetujuan"]); st.success("✅ Jadwal berhasil diajukan!")
+                if tgl.strftime("%Y-%m-%d") in booked_dates: st.error("❌ Tanggal penuh!")
+                elif tujuan: client.open(NAMA_SPREADSHEET).worksheet("Jadwal_Pendampingan").append_row([datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), tgl.strftime("%Y-%m-%d"), st.session_state.asal_sekolah, tujuan, "Menunggu Persetujuan"]); st.success("✅ Jadwal diajukan!")
 
     elif menu == "Pakta Integritas & Pengesahan":
         st.title("📜 Pengesahan Digital Pimpinan")
@@ -455,69 +460,63 @@ else:
                 client.open(NAMA_SPREADSHEET).worksheet("Pengesahan").append_row([datetime.datetime.now().strftime("%Y-%m-%d"), st.session_state.asal_sekolah, st.session_state.user_name]); st.rerun()
 
     elif menu == "Layanan Konsultasi":
-        st.title("💬 Kotak Keluhan & Arahan Pengawas")
+        st.title("💬 Kotak Keluhan & Kendala Sekolah")
         with st.form("f_kel"):
-            top = st.text_input("Topik Keluhan"); psn = st.text_area("Detail Laporan")
-            if st.form_submit_button("Kirim Keluhan"):
-                if top and psn: client.open(NAMA_SPREADSHEET).worksheet("Konsultasi_Sekolah").append_row([datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), st.session_state.asal_sekolah, st.session_state.user_name, top, psn, "", "Menunggu Respon"]); st.success("Terkirim!")
+            top = st.text_input("Topik Keluhan"); psn = st.text_area("Detail Laporan Kendala Lapangan")
+            if st.form_submit_button("Kirim Keluhan", type="primary"):
+                if top and psn: client.open(NAMA_SPREADSHEET).worksheet("Consultasi_Sekolah") if False else client.open(NAMA_SPREADSHEET).worksheet("Konsultasi_Sekolah").append_row([datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), st.session_state.asal_sekolah, st.session_state.user_name, top, psn, "", "Menunggu Respon"]); st.success("Laporan terkirim!")
+        
+        st.markdown("### 📥 Riwayat Memori Pengaduan & Tanggapan Pengawas")
         df_k = load_data("Konsultasi_Sekolah")
         if not df_k.empty and 'Asal_Sekolah' in df_k.columns:
             df_saya = df_k[df_k['Asal_Sekolah'] == st.session_state.asal_sekolah]
-            for _, row in df_saya.iterrows(): st.info(f"**Topik:** {row.get('Topik_Keluhan','')}\n\n**Detail Keluhan Kami:** {row.get('Detail_Pesan','')}\n\n**Arahan:** {row.get('Tanggapan_Pengawas', '⏳ Belum dibalas')}")
+            for _, row in df_saya.iterrows():
+                st.info(f"📌 **Topik:** {row.get('Topik_Keluhan','')}\n\n🔍 **Deskripsi Aduan:** {row.get('Detail_Pesan','')}\n\n💡 **Arahan Pengawas:** {row.get('Tanggapan_Pengawas', '⏳ Sedang ditinjau Ibu Pengawas')}")
 
-    # --- [D] FITUR OPERATOR (OPTIMALISASI MEMORI RIWAYAT) ---
+    # --- [D] FITUR OPERATOR (MEMORI UTUH ARSIP PERMANEN) ---
     elif menu == "Dashboard Operator":
-        st.title(f"🔧 Dasbor Teknis - {st.session_state.asal_sekolah}")
-        st.warning("⚠️ Dokumen wajib dikompres di bawah batas maksimal 3 MB per file!")
+        st.title(f"🔧 Dasbor Teknis Operator - {st.session_state.asal_sekolah}")
+        st.warning("⚠️ Berkas fisik wajib di bawah 3 MB. Seluruh pengumpulan Anda tersimpan abadi di sistem.")
         
-        # OBLIGASI MEMORI: Menampilkan riwayat permanen di dashboard operator agar tidak lupa
-        st.markdown("### 🗄️ Dokumen Administrasi Sekolah Anda")
-        st.write("Daftar seluruh tugas yang telah dikirimkan oleh Operator ke dalam sistem pengawasan:")
+        st.markdown("### 🗄️ Riwayat Permanen Pengumpulan Tugas Sekolah Anda")
         df_art = load_data("Artefak_Portofolio")
         if not df_art.empty and 'Nama_Sekolah' in df_art.columns:
             df_ops_saya = df_art[df_art['Nama_Sekolah'] == st.session_state.asal_sekolah]
             if not df_ops_saya.empty:
-                st.dataframe(df_ops_saya[['Timestamp', 'Nama_Tugas', 'Link_File', 'Status', 'Catatan_Pengawas']], 
-                             column_config={"Link_File": st.column_config.LinkColumn("Buka File 🔗", display_text="View Dokumen")}, 
-                             use_container_width=True)
-            else: st.info("Sekolah Anda belum memiliki riwayat unggahan tugas.")
+                st.dataframe(df_ops_saya[['Timestamp', 'Nama_Tugas', 'Link_File', 'Status', 'Catatan_Pengawas']], column_config={"Link_File": st.column_config.LinkColumn("Buka File 🔗", display_text="View Dokumen")}, use_container_width=True)
+            else: st.info("Belum ada riwayat tugas.")
 
     elif menu == "Upload Artefak":
-        st.title("📤 Unggah Berkas Tagihan")
+        st.title("📤 Unggah Berkas Komponen Mutu")
         df_tag = load_data("Tagihan_Tugas")
         daftar = df_tag["Nama_Tugas"].tolist() if not df_tag.empty else ["Kosong"]
-        with st.form("f_up"):
-            st.info("💡 Berkas fisik Anda akan otomatis dicadangkan permanen ke Google Drive Admin agar berkas administratif tetap aman (Anti-Hilang).")
-            tugas = st.selectbox("Pilih Tagihan", daftar)
-            file_art = st.file_uploader("📂 Pilih File Dokumen Fisik Anda (WAJIB - Maksimal 3 MB)", type=['pdf', 'docx', 'doc', 'xlsx', 'xls', 'zip'])
-            link_drive_backup = st.text_input("🔗 Link Alternatif Google Drive Anda (Opsional)")
+        with st.form("f_up_secure"):
+            st.info("💡 Berkas fisik Anda otomatis dicadangkan permanen ke Google Drive Admin. Walaupun Anda menghapusnya dari drive pribadi nanti, arsip Pengawas tetap aman.")
+            tugas = st.selectbox("Pilih Komponen Tagihan Tugas", daftar)
+            file_art = st.file_uploader("📂 Pilih File Dokumen Fisik (Wajib - Maksimal 3 MB)", type=['pdf', 'docx', 'doc', 'xlsx', 'xls', 'zip'])
+            link_alt = st.text_input("🔗 Link Alternatif GDrive Sekolah (Opsional)")
             
-            if st.form_submit_button("Kirim Dokumen"):
-                if not file_art: st.error("❌ Mohon pilih file dokumen fisik Anda terlebih dahulu!")
-                elif file_art.size > 3 * 1024 * 1024: st.error("❌ FILE TERLALU BESAR: Maksimal file adalah 3 MB!")
+            if st.form_submit_button("Kunci & Kirim ke Pengawas", type="primary"):
+                if not file_art: st.error("❌ Pilih file fisik terlebih dahulu!")
+                elif file_art.size > 3 * 1024 * 1024: st.error("❌ Ukuran file melanggar batas maksimal 3 MB!")
                 elif client:
-                    with st.spinner("Sedang mengamankan berkas ke Cloud Google Drive Admin..."):
-                        # Amankan berkas fisik ke Drive Admin secara permanen
+                    with st.spinner("Sedang mengamankan berkas fisik ke Google Drive Admin..."):
                         secure_link = upload_to_admin_drive(file_art)
-                        final_link = secure_link if secure_link else link_drive_backup
-                        
-                        if not final_link:
-                            st.error("❌ Gagal mengunggah berkas ke Drive Admin. Silakan periksa jaringan Anda.")
+                        final_link = secure_link if secure_link else link_alt
+                        if not final_link: st.error("❌ Gagal mengunggah berkas aman.")
                         else:
                             s_art = client.open(NAMA_SPREADSHEET).worksheet("Artefak_Portofolio")
                             raw = s_art.get_all_values()
                             ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            
                             found = False
                             for idx, row in enumerate(raw):
                                 if idx > 0 and str(row[1]).strip() == st.session_state.asal_sekolah and str(row[2]).strip() == tugas:
                                     s_art.update_cell(idx + 1, 1, ts)
-                                    s_art.update_cell(idx + 1, 4, final_link) # Overwrite link lama dengan berkas Drive Admin permanen
+                                    s_art.update_cell(idx + 1, 4, final_link)
                                     s_art.update_cell(idx + 1, 5, "Menunggu Validasi")
                                     s_art.update_cell(idx + 1, 6, "")
                                     found = True; break
-                                    
-                            if found: st.success("✅ Berkas perbaikan berhasil ditimpa ke dalam sistem arsip Admin (Anti-Double)!")
+                            if found: st.success("✅ File lama berhasil ditimpa dengan revisi terbaru (Anti-Double)!")
                             else:
                                 s_art.append_row([ts, st.session_state.asal_sekolah, tugas, final_link, "Menunggu Validasi", ""])
                                 st.success("✅ Berkas baru berhasil diamankan di Cloud Google Drive Admin!")
@@ -528,5 +527,5 @@ else:
         if not df_art.empty and 'Status' in df_art.columns and 'Nama_Sekolah' in df_art.columns:
             df_rev = df_art[(df_art['Nama_Sekolah'] == st.session_state.asal_sekolah) & (df_art['Status'] == 'Perlu Revisi ♻️')]
             if not df_rev.empty:
-                for _, row in df_rev.iterrows(): st.error(f"❌ **Tugas:** {row.get('Nama_Tugas','')} | **Catatan Revisi:** {row.get('Catatan_Pengawas','')}")
+                for _, row in df_rev.iterrows(): st.error(f"❌ **Tugas Kontendala:** {row.get('Nama_Tugas','')} | **Feedback Catatan:** {row.get('Catatan_Pengawas','')}")
             else: st.success("🎉 Bersih! Tidak ada tugas Anda yang berstatus revisi.")
