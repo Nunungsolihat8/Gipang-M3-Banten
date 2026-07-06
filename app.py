@@ -551,8 +551,7 @@ if st.session_state.show_login:
 
     # --- POPUP REGISTER ---
     if st.session_state.show_register:
-
-    with st.container(border=True):
+     with st.container(border=True):
 
         st.subheader("🚀 Request Akses")
 
