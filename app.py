@@ -951,48 +951,32 @@ else:
                         st.link_button("⬇️ Download Materi", link_dl, use_container_width=True)
                     else:
                         st.button("⚠️ Link Belum Tersedia", disabled=True, use_container_width=True)
-    else: st.info("Belum ada materi publik.")
+else:
+        st.info("Belum ada materi publik.")
 
-# ==========================================
-# CTA
-# ==========================================
+    # ==========================================
+    # CTA
+    # ==========================================
 
-st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
 
-st.info("""
-🚀 **Siap bergabung bersama GIPANG M3 BANTEN?**
+    st.info("""
+    🚀 **Siap bergabung bersama GIPANG M3 BANTEN?**
+    """)
 
-Kelola portofolio sekolah secara digital,
-lebih cepat,
-lebih aman,
-dan lebih transparan.
-""")
+    # ==========================================
+    # FOOTER
+    # ==========================================
 
-# ==========================================
-# FOOTER
-# ==========================================
-
-st.markdown("""
-
-<div class="footer">
-
-© 2026 GIPANG M3 BANTEN
-
-Gerakan Inovatif Pendampingan Memantau, dan
-
-Mengevaluasi,
-
-Menilai Bantuan Teknologi
-
-</div>
-
-""",unsafe_allow_html=True)
+    st.markdown("""
+    <div class="footer">
+    ...
+    </div>
+    """, unsafe_allow_html=True)
 
 else:
-    # ==========================================
-    # 4. PRIVATE VIEW (WORKSPACE ROUTING)
-    # ==========================================
-    st.sidebar.markdown(f"""
+    # PRIVATE VIEW
+st.sidebar.markdown(f"""
 
 ## 👋 Halo
 
@@ -1011,11 +995,11 @@ else:
     elif st.session_state.user_role == "Operator":
         menu = st.sidebar.radio("Navigasi Operator", ["Dashboard Operator", "Upload Artefak", "Riwayat & Perbaikan", "Upload Galeri Kegiatan", "🚪 Keluar"])
 
-    if menu=="🚪 Keluar":
+if menu == "🚪 Keluar":
 
     for key in DEFAULT_SESSION:
 
-        st.session_state[key]=DEFAULT_SESSION[key]
+        st.session_state[key] = DEFAULT_SESSION[key]
 
     st.success("Logout berhasil.")
 
