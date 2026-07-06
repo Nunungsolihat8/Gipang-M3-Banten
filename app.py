@@ -1046,133 +1046,191 @@ if menu == "🚪 Keluar":
 
     st.rerun()
 
-    # --- [A] FITUR BERSAMA ---
-    if menu == "Upload Galeri Kegiatan":
-        st.title("📸 Upload Dokumentasi Foto Kegiatan")
-        with st.container(border=True):
-            metode = st.radio("Metode Upload:", ["📂 Unggah File (JPG/PNG)", "🔗 Gunakan Link Google Drive"])
-            desc = st.text_input("Judul / Deskripsi Singkat Kegiatan")
-            
-            if metode == "📂 Unggah File (JPG/PNG)":
-                fotos = st.file_uploader("Pilih Maks 3 File (@2MB)", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
-if fotos:
+# --- [A] FITUR BERSAMA ---
+if menu == "Upload Galeri Kegiatan":
 
-    st.write("Preview")
+    st.title("📸 Upload Dokumentasi Foto Kegiatan")
 
-    cols=st.columns(len(fotos))
+    with st.container(border=True):
 
-    for i,f in enumerate(fotos):
-
-        cols[i].image(
-            f,
-            use_container_width=True
+        metode = st.radio(
+            "Metode Upload:",
+            [
+                "📂 Unggah File (JPG/PNG)",
+                "🔗 Gunakan Link Google Drive"
+            ]
         )
-               if st.button(
-    "🚀 Publish",
-    type="primary"
-):
 
-    if not desc:
+        desc = st.text_input(
+            "Judul / Deskripsi Singkat Kegiatan"
+        )
 
-        st.error("Isi deskripsi.")
+        # =====================================
+        # UPLOAD FILE
+        # =====================================
 
-    elif not fotos:
+        if metode == "📂 Unggah File (JPG/PNG)":
 
-        st.error("Pilih minimal satu foto.")
+            fotos = st.file_uploader(
+                "Pilih Maksimal 3 Foto",
+                type=["jpg", "jpeg", "png"],
+                accept_multiple_files=True
+            )
 
-    elif len(fotos)>3:
+            # Preview
+            if fotos:
 
-        st.error("Maksimal tiga foto.")
+                st.write("### Preview")
 
-    else:
+                cols = st.columns(len(fotos))
 
-        urls=[]
+                for i, f in enumerate(fotos):
 
-        with st.spinner("Upload..."):
-
-            for f in fotos:
-
-                if f.size>2*1024*1024:
-
-                    st.error(
-                        f"{f.name} lebih dari 2MB"
+                    cols[i].image(
+                        f,
+                        use_container_width=True
                     )
 
-                    st.stop()
+            if st.button(
+                "🚀 Publish",
+                type="primary",
+                use_container_width=True
+            ):
 
-                link,error=upload_to_imgbb(f)
+                if not desc:
 
-                if error:
+                    st.error("Isi deskripsi kegiatan.")
 
-                    st.error(error)
+                elif not fotos:
 
-                    st.stop()
+                    st.error("Pilih minimal satu foto.")
 
-                urls.append(link)
+                elif len(fotos) > 3:
 
-        while len(urls)<3:
+                    st.error("Maksimal 3 foto.")
 
-            urls.append("")
+                else:
 
-        append_row(
+                    urls = []
 
-            "Galeri_Portofolio",
+                    with st.spinner("Mengupload..."):
 
-            [
+                        for f in fotos:
 
-                datetime.datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
+                            if f.size > 2 * 1024 * 1024:
 
-                st.session_state.asal_sekolah,
+                                st.error(
+                                    f"{f.name} melebihi 2 MB."
+                                )
 
-                desc,
+                                st.stop()
 
-                urls[0],
+                            link, error = upload_to_imgbb(f)
 
-                urls[1],
+                            if error:
 
-                urls[2]
+                                st.error(error)
 
-            ]
+                                st.stop()
 
-        )
+                            urls.append(link)
 
-        st.success(
-            "Berhasil dipublikasikan."
-        )
+                    while len(urls) < 3:
+                        urls.append("")
 
-        st.rerun()
+                    append_row(
 
-            else:
-                l1 = st.text_input("Link Foto Utama (Wajib)")
-                l2 = st.text_input("Link Foto Pendukung 2 (Opsional)")
-                l3 = st.text_input("Link Foto Pendukung 3 (Opsional)")
-                if st.button("🚀 Publish (Google Drive)", type="primary"):
-                    if desc and l1 and client:
-                        client.open(NAMA_SPREADSHEET).append_row(
+                        "Galeri_Portofolio",
 
-    "Galeri_Portofolio",
+                        [
 
-    [
+                            datetime.datetime.now().strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            ),
 
-        datetime.datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
+                            st.session_state.asal_sekolah,
 
-        st.session_state.asal_sekolah,
+                            desc,
 
-        desc,
+                            urls[0],
 
-        auto_convert_drive_url(l1),
+                            urls[1],
 
-        auto_convert_drive_url(l2),
+                            urls[2]
 
-        auto_convert_drive_url(l3)
+                        ]
 
-    ]
+                    )
 
-)
+                    st.success(
+                        "Galeri berhasil dipublikasikan."
+                    )
+
+                    st.rerun()
+
+        # =====================================
+        # GOOGLE DRIVE
+        # =====================================
+
+        else:
+
+            l1 = st.text_input(
+                "Link Foto 1 (Wajib)"
+            )
+
+            l2 = st.text_input(
+                "Link Foto 2 (Opsional)"
+            )
+
+            l3 = st.text_input(
+                "Link Foto 3 (Opsional)"
+            )
+
+            if st.button(
+                "🚀 Publish (Google Drive)",
+                type="primary",
+                use_container_width=True
+            ):
+
+                if not desc:
+
+                    st.error("Isi deskripsi kegiatan.")
+
+                elif not l1:
+
+                    st.error("Link Foto 1 wajib diisi.")
+
+                else:
+
+                    append_row(
+
+                        "Galeri_Portofolio",
+
+                        [
+
+                            datetime.datetime.now().strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            ),
+
+                            st.session_state.asal_sekolah,
+
+                            desc,
+
+                            auto_convert_drive_url(l1),
+
+                            auto_convert_drive_url(l2),
+
+                            auto_convert_drive_url(l3)
+
+                        ]
+
+                    )
+
+                    st.success(
+                        "Galeri berhasil dipublikasikan."
+                    )
+
+                    st.rerun()
 
     # --- [B] FITUR ADMIN (PENGAWAS) ---
     elif menu == "Dashboard Admin":
