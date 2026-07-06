@@ -1,944 +1,223 @@
 import streamlit as st
 import pandas as pd
 import gspread
-import requests
-import json
-import ast
-import base64
-import urllib.parse
-import hashlib
-import re
-import datetime
-
 from oauth2client.service_account import ServiceAccountCredentials
+import datetime
+import json
+import urllib.parse
+import requests
+import base64
 
 # ==========================================
-# PAGE CONFIG
+# 1. PAGE CONFIGURATION & PREMIUM CSS
 # ==========================================
+st.set_page_config(page_title="GIPANG M3 BANTEN", page_icon="🏫", layout="wide", initial_sidebar_state="expanded")
 
-st.set_page_config(
-    page_title="GIPANG M3 BANTEN",
-    page_icon="🏫",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 st.markdown("""
 <style>
-
-.hero-title{
-font-size:52px;
-font-weight:800;
-line-height:1.1;
-color:#0B1F52;
-margin-bottom:10px;
-}
-
-.hero-blue{
-color:#2563EB;
-}
-
-.hero-desc{
-
-font-size:17px;
-
-color:#64748B;
-
-line-height:1.8;
-
-margin-top:15px;
-
-margin-bottom:25px;
-
-}
-
-.hero-badge{
-
-display:inline-block;
-
-padding:8px 18px;
-
-background:#DBEAFE;
-
-color:#2563EB;
-
-border-radius:30px;
-
-font-size:13px;
-
-font-weight:600;
-
-margin-bottom:15px;
-
-}
-
-.metric-card{
-
-background:white;
-
-padding:22px;
-
-border-radius:18px;
-
-border:1px solid #E2E8F0;
-
-box-shadow:0px 10px 30px rgba(0,0,0,.05);
-
-text-align:center;
-
-transition:.3s;
-
-}
-
-.metric-card:hover{
-
-transform:translateY(-5px);
-
-}
-
-.metric-value{
-
-font-size:34px;
-
-font-weight:800;
-
-color:#2563EB;
-
-}
-
-.metric-label{
-
-color:#64748B;
-
-font-size:14px;
-
-}
-
-.feature-card{
-
-background:white;
-
-border-radius:20px;
-
-padding:30px;
-
-border:1px solid #E2E8F0;
-
-transition:.35s;
-
-height:100%;
-
-}
-
-.feature-card:hover{
-
-transform:translateY(-8px);
-
-box-shadow:0px 15px 35px rgba(0,0,0,.08);
-
-}
-
-.gallery-card{
-
-background:white;
-
-border-radius:20px;
-
-padding:15px;
-
-border:1px solid #E2E8F0;
-
-margin-bottom:20px;
-
-overflow:hidden;
-
-}
-
-.footer{
-
-padding:40px;
-
-text-align:center;
-
-color:#94A3B8;
-
-font-size:13px;
-
-}
-
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+    html { scroll-behavior: smooth; }
+    body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] { 
+        background: linear-gradient(180deg, #eef5ff 0%, #ffffff 400px, #ffffff 100%); 
+        font-family: 'Poppins', sans-serif !important; 
+        color: #0B1F52; 
+    }
+    .premium-navbar { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); padding: 12px 40px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 4px 20px rgba(11, 31, 82, 0.04); margin-bottom: 25px; }
+    .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 22px; color: #0B1F52; }
+    .nav-brand span { color: #1D4ED8; }
+    .tagline-badge { background-color: #1D4ED8; color: white; padding: 6px 16px; border-radius: 30px; font-size: 13px; font-weight: 600; display: inline-block; margin-bottom: 15px; }
+    .hero-h1 { font-size: 45px; font-weight: 800; color: #0B1F52; line-height: 1.15; margin: 0 0 10px 0; }
+    .hero-h1 span { color: #1D4ED8; }
+    .saas-card { background: white; border-radius: 20px; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(11, 31, 82, 0.02); transition: all 0.4s ease; height: 100%; }
+    .saas-card:hover { transform: translateY(-5px); box-shadow: 0 20px 40px rgba(11, 31, 82, 0.06); border-color: #60a5fa; }
+    .icon-box { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 12px; }
+    .stButton button { border-radius: 10px !important; font-weight: 600 !important; }
 </style>
-
 """, unsafe_allow_html=True)
 
 # ==========================================
-# SESSION
+# 2. STATE INITIALIZATION & DATABASE ENGINE
 # ==========================================
-
-DEFAULT_SESSION = {
-    "logged_in": False,
-    "show_login": False,
-    "show_register": False,
-    "user_role": "Public",
-    "user_name": "Guest",
-    "asal_sekolah": ""
-}
-
-for key, value in DEFAULT_SESSION.items():
-    if key not in st.session_state:
-        st.session_state[key] = value
-
-# ==========================================
-# DATABASE
-# ==========================================
+for key in ["logged_in", "show_login", "show_register"]:
+    if key not in st.session_state: st.session_state[key] = False
+if "user_role" not in st.session_state: st.session_state.user_role = "Public"
+if "user_name" not in st.session_state: st.session_state.user_name = "Guest"
+if "asal_sekolah" not in st.session_state: st.session_state.asal_sekolah = ""
 
 NAMA_SPREADSHEET = "Database_Portofolio_Pengawas"
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource
 def get_gspread_client():
-
     try:
-
-        scope = [
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive"
-        ]
-
-        raw_secret = st.secrets["gcp"]["kunci_json"]
-
-        try:
-            creds_dict = json.loads(raw_secret)
-
-        except:
-            creds_dict = ast.literal_eval(raw_secret)
-
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(
-            creds_dict,
-            scope
-        )
-
-        client = gspread.authorize(creds)
-
-        return client
-
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        if "gcp" not in st.secrets or "kunci_json" not in st.secrets["gcp"]:
+            return None, "Kunci Secrets GCP belum disetting."
+        kunci_mentah = st.secrets["gcp"]["kunci_json"]
+        import ast
+        try: creds_dict = json.loads(kunci_mentah, strict=False)
+        except: creds_dict = ast.literal_eval(kunci_mentah.replace('\n', ''))
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        return gspread.authorize(creds), "Sukses"
     except Exception as e:
+        return None, f"Error: {str(e)}"
 
-        st.error(f"Gagal koneksi Google Sheet\n\n{e}")
-
-        return None
-
-
-client = get_gspread_client()
+client, conn_status = get_gspread_client()
 
 # ENGINE BARU: Membersihkan Spasi Header Google Sheets otomatis
-@st.cache_data(ttl=20)
 def load_data(sheet_name):
-
-    if client is None:
-        return pd.DataFrame()
-
-    try:
-
-        ws = client.open(
-            NAMA_SPREADSHEET
-        ).worksheet(sheet_name)
-
-        values = ws.get_all_values()
-
-        if len(values) <= 1:
+    if client:
+        try:
+            sheet = client.open(NAMA_SPREADSHEET).worksheet(sheet_name)
+            raw_data = sheet.get_all_values()
+            if len(raw_data) > 1:
+                headers = [str(h).strip() for h in raw_data[0]]
+                df = pd.DataFrame(raw_data[1:], columns=headers)
+                return df
             return pd.DataFrame()
-
-        header = [
-            str(x).strip()
-            for x in values[0]
-        ]
-
-        df = pd.DataFrame(
-            values[1:],
-            columns=header
-        )
-
-        return df
-
-    except Exception as e:
-
-        st.error(e)
-
-        return pd.DataFrame()
-
-
-# ==========================================
-# HELPER BARU
-# ==========================================
-
-def append_row(sheet_name, row):
-
-    try:
-
-        client.open(
-            NAMA_SPREADSHEET
-        ).worksheet(sheet_name).append_row(
-            row,
-            value_input_option="USER_ENTERED"
-        )
-
-        # Refresh cache agar data terbaru langsung terbaca
-        load_data.clear()
-
-        return True
-
-    except Exception as e:
-
-        st.error(e)
-
-        return False
+        except:
+            return pd.DataFrame()
+    return pd.DataFrame()
 
 # MESIN API IMGBB (Untuk Foto JPG/PNG Langsung)
-def upload_to_imgbb(image):
-
+def upload_to_imgbb(image_file):
     try:
-
-        api = st.secrets["imgbb"]["api_key"]
-
-        encoded = base64.b64encode(
-            image.getvalue()
-        ).decode()
-
-        response = requests.post(
-
-            "https://api.imgbb.com/1/upload",
-
-            data={
-
-                "key": api,
-
-                "image": encoded
-
-            },
-
-            timeout=30
-
-        )
-
-        result = response.json()
-
-        if result["success"]:
-
-            return (
-                result["data"]["display_url"],
-                None
-            )
-
-        return None, result
-
-    except Exception as e:
-
-        return None, str(e)
+        if "imgbb" in st.secrets and "api_key" in st.secrets["imgbb"]:
+            res = requests.post("https://api.imgbb.com/1/upload", data={
+                "key": st.secrets["imgbb"]["api_key"], 
+                "image": base64.b64encode(image_file.getvalue()).decode("utf-8")
+            })
+            if res.status_code == 200: return res.json()['data']['url'], "OK"
+            return "", f"ImgBB Error: {res.text}"
+        return "", "Kunci API ImgBB belum dipasang di Secrets."
+    except Exception as e: return "", str(e)
 
 # MESIN PARSER GOOGLE DRIVE (Untuk Link GDrive)
 def auto_convert_drive_url(url):
-
-    if not url:
-        return ""
-
+    if not url or not isinstance(url, str): return ""
     url = url.strip()
-
-    if "drive.google.com" not in url:
-        return url
-
-    try:
-
+    if "drive.google.com" in url:
         if "/file/d/" in url:
-
-            file_id = url.split("/file/d/")[1].split("/")[0]
-
+            parts = url.split("/file/d/")
+            if len(parts) > 1:
+                file_id = parts[1].split("/")[0].split("?")[0]
+                return f"https://drive.google.com/uc?id={file_id}"
         elif "id=" in url:
-
             parsed = urllib.parse.urlparse(url)
+            qs = urllib.parse.parse_qs(parsed.query)
+            if "id" in qs: return f"https://drive.google.com/uc?id={qs['id'][0]}"
+    return url
 
-            file_id = urllib.parse.parse_qs(
-                parsed.query
-            )["id"][0]
-
-        else:
-
-            return url
-
-        return f"https://drive.google.com/uc?id={file_id}"
-
-    except:
-
-        return url
-
-# ==========================================
-# HELPER FOTO
-# ==========================================
-def get_photo_list(row):
-
-    photos = []
-
-    for col in [
-
-        "Link_Foto1",
-
-        "Link_Foto2",
-
-        "Link_Foto3"
-
-    ]:
-
-        url = str(
-
-            row.get(col, "")
-
-        ).strip()
-
-        if url != "" and url.lower() != "nan":
-
-            photos.append(url)
-
-    return photos
-
-def valid_url(url):
-
-    try:
-
-        r = requests.get(
-
-            url,
-
-            timeout=10
-
-        )
-
-        return r.status_code == 200
-
-    except:
-
-        return False
-
-# ============================
-# LOGIN & REGISTER HELPER
-# ============================
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
-def valid_email(email):
-
-    regex = r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
-
-    return re.match(regex, email)
-
-
-def email_exists(email):
-
-    df = load_data("User")
-
-    if df.empty:
-        return False
-
-    if "Email" not in df.columns:
-        return False
-
-    return email.lower() in [
-        str(x).lower().strip()
-        for x in df["Email"]
-    ]
-    
 # ==========================================
 # 3. PUBLIC VIEW (BERANDA & AUTENTIKASI)
 # ==========================================
-
 if not st.session_state.logged_in:
+    
+    st.markdown("<div id='beranda'></div>", unsafe_allow_html=True)
+    st.markdown("""
+        <div class='premium-navbar'>
+            <div class='nav-brand'>🏛️ GIPANG <span>M3</span> BANTEN</div>
+            <div style='display: flex; gap: 30px; font-weight: 500; font-size: 14px;'>
+                <a href='#beranda' style='color:#1D4ED8; text-decoration:none;'>Beranda</a>
+                <a href='#fitur' style='color:#475569; text-decoration:none;'>Fitur</a>
+                <a href='#portofolio' style='color:#475569; text-decoration:none;'>Portofolio Kegiatan</a>
+                <a href='#materi' style='color:#475569; text-decoration:none;'>Materi Publik</a>
+            </div>
+            <div style='visibility: hidden; width: 0px;'>Nav Spacer</div>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # ==========================
-    # LOAD DATA LANDING PAGE
-    # ==========================
-
-    df_gal = load_data("Galeri_Portofolio")
-    df_user = load_data("User")
-    df_art = load_data("Artefak_Portofolio")
-
-    total_sekolah = 0
-    total_art = 0
-    total_galeri = 0
-
-    if not df_user.empty:
-        total_sekolah = len(df_user["Asal_Sekolah"].unique())
-
-    if not df_art.empty:
-        total_art = len(df_art)
-
-    if not df_gal.empty:
-        total_galeri = len(df_gal)
-
-    # NAVBAR
-    st.markdown(...)
+    col_nav1, col_nav2, col_nav3 = st.columns([7, 1.2, 1.5])
+    with col_nav2:
+        if st.button("🔒 Masuk", use_container_width=True):
+            st.session_state.show_login = True; st.session_state.show_register = False; st.rerun()
+    with col_nav3:
+        if st.button("🚀 Request Akses", type="primary", use_container_width=True):
+            st.session_state.show_register = True; st.session_state.show_login = False; st.rerun()
 
     # --- POPUP LOGIN ---
     if st.session_state.show_login:
-    if st.session_state.show_login:
-
-    with st.container(border=True):
-
-        st.subheader("🔐 Login Workspace")
-
-        email=st.text_input(
-            "Email"
-        )
-
-        password=st.text_input(
-            "Password",
-            type="password"
-        )
-
-        c1,c2=st.columns(2)
-
-        login=c1.button(
-            "Login",
-            use_container_width=True
-        )
-
-        cancel=c2.button(
-            "Batal",
-            use_container_width=True
-        )
-
-        if cancel:
-
-            st.session_state.show_login=False
-
-            st.rerun()
-
-        if login:
-
-            df=load_data("User")
-
-            if df.empty:
-
-                st.error("Database kosong.")
-
-            else:
-
-                email=email.lower().strip()
-
-                password=hash_password(password)
-
-                df["Email"]=df["Email"].str.lower()
-
-                user=df[
-                    (df["Email"]==email)
-                    &
-                    (df["Password"]==password)
-                ]
-
-                if user.empty:
-
-                    st.error("Email atau Password salah.")
-
-                else:
-
-                    if user.iloc[0]["Status_Akun"]!="Aktif":
-
-                        st.warning("Akun masih menunggu persetujuan.")
-
-                    else:
-
-                        st.session_state.logged_in=True
-
-                        st.session_state.user_name=user.iloc[0]["Nama_Lengkap"]
-
-                        st.session_state.user_role=user.iloc[0]["Role"]
-
-                        st.session_state.asal_sekolah=user.iloc[0]["Asal_Sekolah"]
-
-                        st.success("Login berhasil.")
-
-                        st.rerun()
+        with st.container(border=True):
+            st.markdown("#### 🔐 Portal Autentikasi Ruang Kerja")
+            e_log = st.text_input("📧 Email")
+            p_log = st.text_input("🔑 Password", type="password")
+            if st.button("Login Sekarang", type="primary"):
+                df_users = load_data("User")
+                if not df_users.empty and 'Email' in df_users.columns:
+                    match = df_users[(df_users['Email'].astype(str) == e_log) & (df_users['Password'].astype(str) == p_log)]
+                    if not match.empty:
+                        if match.iloc[0].get('Status_Akun', 'Pending') == 'Aktif':
+                            st.session_state.logged_in = True
+                            st.session_state.user_role = match.iloc[0].get('Role', 'Operator')
+                            st.session_state.asal_sekolah = match.iloc[0].get('Asal_Sekolah', 'Pusat')
+                            st.session_state.user_name = match.iloc[0].get('Nama_Lengkap', 'User')
+                            st.session_state.show_login = False
+                            st.rerun()
+                        else: st.warning("⏳ Akun Anda masih PENDING. Menunggu persetujuan Pengawas.")
+                    else: st.error("❌ Email atau Password salah!")
 
     # --- POPUP REGISTER ---
     if st.session_state.show_register:
-
-    with st.container(border=True):
-
-        st.subheader("🚀 Request Akses")
-
-        with st.form("register"):
-
-            nama=st.text_input(
-                "Nama Lengkap"
-            )
-
-            sekolah=st.text_input(
-                "Asal Sekolah"
-            )
-
-            email=st.text_input(
-                "Email"
-            )
-
-            role=st.selectbox(
-
-                "Role",
-
-                [
-
-                    "Operator",
-
-                    "Kepala Sekolah"
-
-                ]
-
-            )
-
-            password=st.text_input(
-
-                "Password",
-
-                type="password"
-
-            )
-
-            submit=st.form_submit_button(
-
-                "Daftar"
-
-            )
-
-            if submit:
-
-                if "" in [
-
-                    nama,
-
-                    sekolah,
-
-                    email,
-
-                    password
-
-                ]:
-
-                    st.error("Lengkapi seluruh data.")
-
-                elif not valid_email(email):
-
-                    st.error("Format email tidak valid.")
-
-                elif email_exists(email):
-
-                    st.error("Email sudah digunakan.")
-
-                elif len(password)<8:
-
-                    st.error("Password minimal 8 karakter.")
-
-                else:
-
-                    besar=any(c.isupper() for c in password)
-
-                    kecil=any(c.islower() for c in password)
-
-                    angka=any(c.isdigit() for c in password)
-
-                    if not all([besar,kecil,angka]):
-
-                        st.error(
-
-                            "Password harus memiliki huruf besar, huruf kecil, dan angka."
-
-                        )
-
-                    else:
-
-                        append_row(
-
-                            "User",
-
-                            [
-
-                                nama,
-
-                                sekolah,
-
-                                email,
-
-                                role,
-
-                                hash_password(password),
-
-                                "Pending"
-
-                            ]
-
-                        )
-
-                        st.success(
-
-                            "Pendaftaran berhasil."
-
-                        )
-
-                        st.balloons()
-
-                        st.session_state.show_register=False
-
-                        st.rerun()
+        with st.container(border=True):
+            st.markdown("#### 🚀 Formulir Permohonan Akses")
+            with st.form("f_reg"):
+                c1, c2 = st.columns(2)
+                r_nama = c1.text_input("👤 Nama Lengkap")
+                r_sek = c2.text_input("🏫 Asal Sekolah")
+                r_em = st.text_input("📧 Alamat Email")
+                c3, c4 = st.columns(2)
+                r_role = c3.selectbox("💼 Role", ["Kepala Sekolah", "Operator"])
+                r_pass = c4.text_input("🔑 Password (Wajib 1 Kapital & 1 Angka)", type="password")
+                if st.form_submit_button("Daftar", type="primary"):
+                    if all([r_nama, r_sek, r_em, r_pass]):
+                        if any(c.isupper() for c in r_pass) and any(c.isdigit() for c in r_pass) and len(r_pass) >= 6:
+                            if client:
+                                client.open(NAMA_SPREADSHEET).worksheet("User").append_row([r_nama, r_sek, r_em, r_role, r_pass, "Pending"])
+                                st.success("✅ Pendaftaran Berhasil! Menunggu validasi Admin.")
+                            else: st.error("Database terputus.")
+                        else: st.error("❌ Password WAJIB min 6 karakter, 1 Huruf Kapital & 1 Angka!")
+                    else: st.error("⚠️ Lengkapi seluruh kolom!")
 
     # --- HERO SECTION ---
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("<hr style='opacity:0.2;'>", unsafe_allow_html=True)
+    c_h1, c_h2 = st.columns([1.3, 1])
+    with c_h1:
+        st.markdown("<div class='tagline-badge'>💻 Platform Pengawas Sekolah Modern</div><div class='hero-h1'>GIPANG <span>M3</span> BANTEN</div><div class='hero-sub'>Gerakan Inovatif Pendampingan Memantau, Mengevaluasi, Menilai Bantuan Teknologi</div><div class='hero-desc'>Platform digital untuk memudahkan pengawas sekolah dalam mengumpulkan, memantau, mengevaluasi, dan menilai portofolio artefak dari sekolah binaan secara transparan, dan terstruktur.</div>", unsafe_allow_html=True)
+    with c_h2:
+        st.markdown("""<div class='mockup-container'><div style='background: white; border: 12px solid #1e293b; border-bottom-width: 24px; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(11,31,82,0.25); overflow: hidden;'><div style='background: #f8fafc; padding: 12px; text-align: left; font-size: 11px; border-bottom: 1px solid #e2e8f0; font-weight: 600;'>📊 Dashboard Workspace - Pengawas Sekolah Banten</div><div style='padding: 20px; background: white; height: 210px; text-align: left;'><div style='display: flex; gap: 10px; margin-bottom: 15px;'><div style='flex:1; background:#eff6ff; padding: 10px; border-radius: 8px; border-left: 4px solid #1D4ED8;'><small style='color:#64748b;'>Sekolah Binaan</small><br><b style='font-size: 16px; color:#0B1F52;'>24</b></div><div style='flex:1; background:#f0fdf4; padding: 10px; border-radius: 8px; border-left: 4px solid #10b981;'><small style='color:#64748b;'>Diterima</small><br><b style='font-size: 16px; color:#065f46;'>156</b></div></div></div></div></div>""", unsafe_allow_html=True)
 
-left,right=st.columns([1.2,.8])
-
-with left:
-
-    st.markdown("""
-<div class='hero-badge'>
-🚀 Platform Digital Pengawas Sekolah
-</div>
-
-<div class='hero-title'>
-GIPANG <span class='hero-blue'>M3</span> BANTEN
-</div>
-
-<div class='hero-desc'>
-Gerakan Inovatif Pendampingan Memantau,
-Mengevaluasi,
-Menilai Bantuan Teknologi.
-
-Platform modern untuk membantu Pengawas Sekolah,
-Kepala Sekolah,
-dan Operator mengelola portofolio digital.
-</div>
-""", unsafe_allow_html=True)
-
-    c1,c2=st.columns(2)
-
-    with c1:
-        if st.button("🚀 Request Akses",use_container_width=True):
-            st.session_state.show_register=True
-            st.rerun()
-
-    with c2:
-        if st.button("🔐 Login",use_container_width=True):
-            st.session_state.show_login=True
-            st.rerun()
-
-with right:
-
-    st.image(
-        "https://images.unsplash.com/photo-1552664730-d307ca884978?w=900",
-        use_container_width=True
-    )
-
-st.markdown("<br>",unsafe_allow_html=True)
-
-a,b,c=st.columns(3)
-
-with a:
-
-    st.markdown(f"""
-
-<div class="metric-card">
-
-<div class="metric-value">
-
-{total_sekolah}
-
-</div>
-
-<div class="metric-label">
-
-Sekolah Terdaftar
-
-</div>
-
-</div>
-
-""",unsafe_allow_html=True)
-
-with b:
-
-    st.markdown(f"""
-
-<div class="metric-card">
-
-<div class="metric-value">
-
-{total_art}
-
-</div>
-
-<div class="metric-label">
-
-Artefak Masuk
-
-</div>
-
-</div>
-
-""",unsafe_allow_html=True)
-
-with c:
-
-    st.markdown(f"""
-
-<div class="metric-card">
-
-<div class="metric-value">
-
-{total_galeri}
-
-</div>
-
-<div class="metric-label">
-
-Dokumentasi
-
-</div>
-
-</div>
-
-""",unsafe_allow_html=True)
-
-    st.markdown("## ✨ Fitur Unggulan")
-
-c1,c2,c3=st.columns(3)
-
-fitur=[
-
-("📂","Upload Artefak","Pengumpulan dokumen sekolah secara digital."),
-
-("📷","Galeri Kegiatan","Dokumentasi kegiatan sekolah."),
-
-("📊","Monitoring","Validasi dan evaluasi real-time.")
-
-]
-
-for col,data in zip([c1,c2,c3],fitur):
-
-    with col:
-
-        st.markdown(f"""
-
-<div class="feature-card">
-
-<h1>{data[0]}</h1>
-
-<h4>{data[1]}</h4>
-
-<p>{data[2]}</p>
-
-</div>
-
-""",unsafe_allow_html=True)
+    st.markdown("<div id='fitur'></div><br>", unsafe_allow_html=True)
+    r_f1, r_f2, r_f3 = st.columns(3)
+    r_f1.markdown("<div class='saas-card'><div class='icon-box' style='background:#eff6ff; color:#1D4ED8;'>📤</div><h5>Pengumpulan Artefak</h5><p style='font-size:13px; color:#64748b;'>Upload berkas portofolio aman maksimal 3MB per file.</p></div>", unsafe_allow_html=True)
+    r_f2.markdown("<div class='saas-card'><div class='icon-box' style='background:#f0fdf4; color:#10b981;'>🛡️</div><h5>Validasi & Evaluasi</h5><p style='font-size:13px; color:#64748b;'>Tinjauan kualitas real-time dan anti duplikasi file.</p></div>", unsafe_allow_html=True)
+    r_f3.markdown("<div class='saas-card'><div class='icon-box' style='background:#f5f3ff; color:#7c3aed;'>📥</div><h5>Download Materi</h5><p style='font-size:13px; color:#64748b;'>Unduh materi pembinaan dan Juknis dari Pengawas.</p></div>", unsafe_allow_html=True)
 
     # --- PERBAIKAN GALERI FOTO (MENGGUNAKAN ST.IMAGE ANTI ERROR) ---
-    st.markdown("""
-<div id='portofolio'></div>
-
-<br>
-
-<hr>
-
-<h3>📸 Galeri Portofolio Kegiatan</h3>
-
-""",unsafe_allow_html=True)
-
-df_gal=load_data("Galeri_Portofolio")
-
-if df_gal.empty:
-
-    st.markdown("""
-
-<div style='
-
-padding:40px;
-
-text-align:center;
-
-border:1px dashed #CBD5E1;
-
-border-radius:18px;
-
-background:#F8FAFC;
-
-'>
-
-<h2>📸</h2>
-
-<h4>Belum Ada Dokumentasi</h4>
-
-Silakan upload kegiatan sekolah pertama Anda.
-
-</div>
-
-""",unsafe_allow_html=True)
-
-else:
-
-    for _,row in df_gal.iterrows():
-
-        photos=get_photo_list(row)
-
-        with st.container(border=True):
-
-            st.subheader(
-                row.get(
-                    "Asal_Sekolah",
-                    "-"
-                )
-            )
-
-            st.caption(
-                row.get(
-                    "Deskripsi_Kegiatan",
-                    "-"
-                )
-            )
-
-            total=len(photos)
-
-            if total==1:
-
-                st.image(
-                    photos[0],
-                    use_container_width=True
-                )
-
-            elif total==2:
-
-                c1,c2=st.columns(2)
-
-                c1.image(
-                    photos[0],
-                    use_container_width=True
-                )
-
-                c2.image(
-                    photos[1],
-                    use_container_width=True
-                )
-
-            elif total>=3:
-
-                c1,c2,c3=st.columns(3)
-
-                c1.image(
-                    photos[0],
-                    use_container_width=True
-                )
-
-                c2.image(
-                    photos[1],
-                    use_container_width=True
-                )
-
-                c3.image(
-                    photos[2],
-                    use_container_width=True
-                )
-
-            st.divider()
+    st.markdown("<div id='portofolio'></div><br><hr style='opacity:0.5;'><br><h4>📸 Galeri Portofolio Kegiatan</h4>", unsafe_allow_html=True)
+    df_gal = load_data("Galeri_Portofolio")
+    if not df_gal.empty and 'Link_Foto1' in df_gal.columns:
+        df_gal_valid = df_gal[df_gal['Link_Foto1'].astype(str).str.strip() != ""]
+        if not df_gal_valid.empty:
+            gal_cols = st.columns(3)
+            for idx, (_, row) in enumerate(df_gal_valid.iterrows()):
+                with gal_cols[idx % 3]:
+                    with st.container(border=True):
+                        # Foto Utama
+                        foto_u = str(row.get('Link_Foto1', '')).strip()
+                        try: st.image(foto_u, use_container_width=True)
+                        except: st.error("Gambar Utama Rusak/Dihapus")
+                        
+                        # Foto Sub
+                        sub_imgs = [str(row.get(c, '')).strip() for c in ['Link_Foto2', 'Link_Foto3'] if str(row.get(c, '')).strip() != ""]
+                        if sub_imgs:
+                            sub_c = st.columns(len(sub_imgs))
+                            for j, s_url in enumerate(sub_imgs):
+                                try: sub_c[j].image(s_url, use_container_width=True)
+                                except: pass
+                        
+                        st.markdown(f"<h6 style='margin-top:10px;'>🏫 {row.get('Asal_Sekolah', '')}</h6>", unsafe_allow_html=True)
+                        st.caption(f"📝 {row.get('Deskripsi_Kegiatan', '')}")
+        else: st.info("Belum ada data foto portofolio valid.")
+    else: st.info("Belum ada portofolio kegiatan.")
 
     # --- PERBAIKAN TOMBOL DOWNLOAD MATERI ---
     st.markdown("<div id='materi'></div><br><hr style='opacity:0.5;'><br><h4>📥 Pusat Download Materi Publik</h4>", unsafe_allow_html=True)
@@ -960,56 +239,18 @@ else:
                         st.button("⚠️ Link Belum Tersedia", disabled=True, use_container_width=True)
     else: st.info("Belum ada materi publik.")
 
-# ==========================================
-# CTA
-# ==========================================
-
-st.markdown("<br><br>", unsafe_allow_html=True)
-
-st.info("""
-🚀 **Siap bergabung bersama GIPANG M3 BANTEN?**
-
-Kelola portofolio sekolah secara digital,
-lebih cepat,
-lebih aman,
-dan lebih transparan.
-""")
-
-# ==========================================
-# FOOTER
-# ==========================================
-
-st.markdown("""
-
-<div class="footer">
-
-© 2026 GIPANG M3 BANTEN
-
-Gerakan Inovatif Pendampingan Memantau, dan
-
-Mengevaluasi,
-
-Menilai Bantuan Teknologi
-
-</div>
-
-""",unsafe_allow_html=True)
-
 else:
     # ==========================================
     # 4. PRIVATE VIEW (WORKSPACE ROUTING)
     # ==========================================
     st.sidebar.markdown(f"""
-
-## 👋 Halo
-
-**{st.session_state.user_name}**
-
-🏫 {st.session_state.asal_sekolah}
-
-🔹 {st.session_state.user_role}
-
-""")
+        <div style='background-color: #f0fdf4; padding: 12px; border-radius: 8px; border: 1px solid #bbf7d0; margin-bottom: 15px;'>
+            <small style='color: #166534; font-weight: 600;'>🔑 USER LOGIN:</small><br>
+            <b style='color: #0b1f52; font-size: 13px;'>{st.session_state.user_name}</b><br>
+            <small style='color:#475569;'>{st.session_state.asal_sekolah}</small><br>
+            <span style='background: #1D4ED8; color: white; font-size: 10px; padding: 2px 8px; border-radius: 10px;'>{st.session_state.user_role}</span>
+        </div>
+    """, unsafe_allow_html=True)
 
     if st.session_state.user_role == "Admin":
         menu = st.sidebar.radio("Navigasi Pengawas", ["Dashboard Admin", "Cek Artefak Sekolah", "Sistem Reminder Email", "Validasi Akun Baru", "Manajemen Tagihan Tugas", "Upload Materi Pusat", "Manajemen Jadwal Pendampingan", "Manajemen Galeri Publik", "Upload Galeri Kegiatan", "Respon Konsultasi", "🚪 Keluar"])
@@ -1018,15 +259,8 @@ else:
     elif st.session_state.user_role == "Operator":
         menu = st.sidebar.radio("Navigasi Operator", ["Dashboard Operator", "Upload Artefak", "Riwayat & Perbaikan", "Upload Galeri Kegiatan", "🚪 Keluar"])
 
-    if menu=="🚪 Keluar":
-
-    for key in DEFAULT_SESSION:
-
-        st.session_state[key]=DEFAULT_SESSION[key]
-
-    st.success("Logout berhasil.")
-
-    st.rerun()
+    if menu == "🚪 Keluar":
+        st.session_state.logged_in = False; st.rerun()
 
     # --- [A] FITUR BERSAMA ---
     if menu == "Upload Galeri Kegiatan":
@@ -1037,361 +271,43 @@ else:
             
             if metode == "📂 Unggah File (JPG/PNG)":
                 fotos = st.file_uploader("Pilih Maks 3 File (@2MB)", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
-if fotos:
-
-    st.write("Preview")
-
-    cols=st.columns(len(fotos))
-
-    for i,f in enumerate(fotos):
-
-        cols[i].image(
-            f,
-            use_container_width=True
-        )
-               if st.button(
-    "🚀 Publish",
-    type="primary"
-):
-
-    if not desc:
-
-        st.error("Isi deskripsi.")
-
-    elif not fotos:
-
-        st.error("Pilih minimal satu foto.")
-
-    elif len(fotos)>3:
-
-        st.error("Maksimal tiga foto.")
-
-    else:
-
-        urls=[]
-
-        with st.spinner("Upload..."):
-
-            for f in fotos:
-
-                if f.size>2*1024*1024:
-
-                    st.error(
-                        f"{f.name} lebih dari 2MB"
-                    )
-
-                    st.stop()
-
-                link,error=upload_to_imgbb(f)
-
-                if error:
-
-                    st.error(error)
-
-                    st.stop()
-
-                urls.append(link)
-
-        while len(urls)<3:
-
-            urls.append("")
-
-        append_row(
-
-            "Galeri_Portofolio",
-
-            [
-
-                datetime.datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-
-                st.session_state.asal_sekolah,
-
-                desc,
-
-                urls[0],
-
-                urls[1],
-
-                urls[2]
-
-            ]
-
-        )
-
-        st.success(
-            "Berhasil dipublikasikan."
-        )
-
-        st.rerun()
-
+                if st.button("🚀 Publish (Upload)", type="primary"):
+                    if desc and fotos:
+                        if len(fotos) > 3: st.error("Maksimal 3 foto!")
+                        elif not all(f.size <= 2*1024*1024 for f in fotos): st.error("Ada file melebihi 2 MB!")
+                        elif client:
+                            with st.spinner("Sedang memproses upload ke server gambar..."):
+                                urls, errors = [], []
+                                for f in fotos:
+                                    link, msg = upload_to_imgbb(f)
+                                    if link: urls.append(link)
+                                    else: errors.append(msg)
+                                
+                                if errors: st.error(f"Gagal upload: {errors[0]}")
+                                else:
+                                    while len(urls) < 3: urls.append("")
+                                    client.open(NAMA_SPREADSHEET).worksheet("Galeri_Portofolio").append_row([datetime.datetime.now().strftime("%Y-%m-%d"), st.session_state.asal_sekolah, desc, urls[0], urls[1], urls[2]])
+                                    st.success("🎉 Foto berhasil tayang di Galeri Publik!")
+                        else: st.error("Gagal terhubung database.")
+                    else: st.error("Isi deskripsi dan pilih foto.")
             else:
                 l1 = st.text_input("Link Foto Utama (Wajib)")
                 l2 = st.text_input("Link Foto Pendukung 2 (Opsional)")
                 l3 = st.text_input("Link Foto Pendukung 3 (Opsional)")
                 if st.button("🚀 Publish (Google Drive)", type="primary"):
                     if desc and l1 and client:
-                        client.open(NAMA_SPREADSHEET).append_row(
-
-    "Galeri_Portofolio",
-
-    [
-
-        datetime.datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
-
-        st.session_state.asal_sekolah,
-
-        desc,
-
-        auto_convert_drive_url(l1),
-
-        auto_convert_drive_url(l2),
-
-        auto_convert_drive_url(l3)
-
-    ]
-
-)
+                        client.open(NAMA_SPREADSHEET).worksheet("Galeri_Portofolio").append_row([datetime.datetime.now().strftime("%Y-%m-%d"), st.session_state.asal_sekolah, desc, auto_convert_drive_url(l1), auto_convert_drive_url(l2), auto_convert_drive_url(l3)])
+                        st.success("🎉 Link Foto berhasil ditautkan dan tayang di Galeri Publik!")
+                    else: st.error("Judul dan Link Foto Utama wajib diisi.")
 
     # --- [B] FITUR ADMIN (PENGAWAS) ---
     elif menu == "Dashboard Admin":
-
-    #LOAD DATA
-    st.title("📊 Dashboard Pengawas")
-
-    df_art = load_data("Artefak_Portofolio")
-    df_user = load_data("User")
-    df_tag = load_data("Tagihan_Tugas")
-
-    total_art = len(df_art)
-
-    total_user = len(df_user)
-
-    total_tugas = len(df_tag)
-
-    pending = 0
-    revisi = 0
-    disetujui = 0
-
-    if not df_art.empty and "Status" in df_art.columns:
-
-        pending = len(
-            df_art[
-                df_art["Status"]=="Menunggu Validasi"
-            ]
-        )
-
-        revisi = len(
-            df_art[
-                df_art["Status"]=="Perlu Revisi ♻️"
-            ]
-        )
-
-        disetujui = len(
-            df_art[
-                df_art["Status"]=="Disetujui ✅"
-            ]
-        )
-
-#KPI CARD
-c1,c2,c3,c4=st.columns(4)
-
-c1.metric(
-
-    "🏫 Sekolah",
-
-    total_user
-
-)
-
-c2.metric(
-
-    "📂 Artefak",
-
-    total_art
-
-)
-
-c3.metric(
-
-    "⏳ Pending",
-
-    pending
-
-)
-
-c4.metric(
-
-    "✅ Disetujui",
-
-    disetujui
-)
-
-
-#PROGRESS
-st.markdown("### Progress Validasi")
-
-if total_art>0:
-
-    persen = disetujui/total_art
-
-    st.progress(persen)
-
-    st.write(
-
-        f"{persen*100:.1f}% selesai divalidasi"
-
-    )
-
-#STATISTIK STATUS
-st.markdown("### Ringkasan Status")
-
-a,b,c=st.columns(3)
-
-a.success(f"✅ {disetujui}")
-
-b.warning(f"⏳ {pending}")
-
-c.error(f"♻️ {revisi}")
-
-#GRAFIK
-if not df_art.empty:
-
-    st.markdown("### Grafik Status")
-
-    chart = (
-        df_art["Status"]
-        .value_counts()
-    )
-
-    st.bar_chart(chart)
-
-#DASHBOARD SEKOLAH
-if not df_art.empty:
-
-    st.markdown("### 🏫 Statistik Sekolah")
-
-    sekolah = (
-
-        df_art
-
-        .groupby("Nama_Sekolah")
-
-        .size()
-
-        .sort_values(ascending=False)
-
-    )
-
-    st.bar_chart(sekolah)
-
-#SEARCH
-st.markdown("### 🔍 Cari Artefak")
-
-keyword = st.text_input(
-    "Cari Nama Sekolah"
-)
-
-status = st.selectbox(
-
-    "Filter Status",
-
-    [
-
-        "Semua",
-
-        "Menunggu Validasi",
-
-        "Disetujui ✅",
-
-        "Perlu Revisi ♻️"
-
-    ]
-
-)
-
-#FILTER
-df_show = df_art.copy()
-
-if keyword:
-
-    df_show = df_show[
-
-        df_show["Nama_Sekolah"]
-
-        .str.contains(
-
-            keyword,
-
-            case=False,
-
-            na=False
-
-        )
-
-    ]
-
-if status != "Semua":
-
-    df_show = df_show[
-
-        df_show["Status"] == status
-
-    ]
-
-#TABEL
-st.markdown("### 📋 Daftar Artefak")
-
-if not df_show.empty:
-
-    st.dataframe(
-
-        df_show[
-            [
-
-                "Timestamp",
-
-                "Nama_Sekolah",
-
-                "Nama_Tugas",
-
-                "Status",
-
-                "Catatan_Pengawas"
-
-            ]
-
-        ],
-
-        use_container_width=True,
-
-        hide_index=True
-
-    )
-
-else:
-
-    st.info("Belum ada data.")
-
-#DOWNLOAD CSV
-if not df_show.empty:
-
-    csv = df_show.to_csv(index=False)
-
-    st.download_button(
-
-        "⬇ Download CSV",
-
-        csv,
-
-        "Artefak.csv",
-
-        "text/csv"
-
-    )
+        st.title("📊 Panel Kontrol Utama Pengawas")
+        df_art = load_data("Artefak_Portofolio")
+        pending = len(df_art[df_art['Status'] == 'Menunggu Validasi']) if not df_art.empty and 'Status' in df_art.columns else 0
+        st.metric("Tugas Menunggu Pemeriksaan", f"{pending} Dokumen", delta_color="inverse")
+        st.markdown("### 📋 Ringkasan Artefak Masuk Terbaru")
+        if not df_art.empty and 'Nama_Sekolah' in df_art.columns: st.dataframe(df_art[['Timestamp', 'Nama_Sekolah', 'Nama_Tugas', 'Status']].tail(10), use_container_width=True)
 
     elif menu == "Cek Artefak Sekolah":
         st.title("🛡️ Pemeriksaan & Penilaian Portofolio")
