@@ -267,11 +267,11 @@ else:
             desc = st.text_input("Judul / Deskripsi Singkat Kegiatan")
             
             if metode == "📂 Unggah File (JPG/PNG)":
-                fotos = st.file_uploader("Pilih Maks 3 File (@2MB)", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+                fotos = st.file_uploader("Pilih Maks 3 File (@3MB)", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
                 if st.button("🚀 Publish (Upload)", type="primary"):
                     if desc and fotos:
                         if len(fotos) > 3: st.error("Maksimal 3 foto!")
-                        elif not all(f.size <= 2*1024*1024 for f in fotos): st.error("Ada file melebihi 2 MB!")
+                        elif not all(f.size <= 2*1024*1024 for f in fotos): st.error("Ada file melebihi 3 MB!")
                         elif client:
                             with st.spinner("Sedang memproses upload..."):
                                 urls, errors = [], []
