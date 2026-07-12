@@ -63,6 +63,7 @@ def get_gspread_client():
 
 client, conn_status = get_gspread_client()
 
+@st.cache_data(ttl=600)
 def load_data(sheet_name):
     if client:
         try:
