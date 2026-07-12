@@ -7,6 +7,7 @@ import json
 import urllib.parse
 import requests
 import base64
+import ast
 
 # ==========================================
 # 1. PAGE CONFIGURATION & PREMIUM CSS
@@ -54,7 +55,6 @@ def get_gspread_client():
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         if "gcp" not in st.secrets or "kunci_json" not in st.secrets["gcp"]: return None, "Kunci Secrets GCP belum disetting."
         kunci_mentah = st.secrets["gcp"]["kunci_json"]
-        import ast
         try: creds_dict = json.loads(kunci_mentah, strict=False)
         except: creds_dict = ast.literal_eval(kunci_mentah.replace('\n', ''))
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -205,14 +205,14 @@ if not st.session_state.logged_in:
                 with gal_cols[idx % 3]:
                     with st.container(border=True):
                         foto_u = str(row.get('Link_Foto1', '')).strip()
-                        try: st.image(foto_u, use_container_width=True)
+                        try: st.image(foto_u, use_column_width=True)
                         except: pass
                         
                         sub_imgs = [str(row.get(c, '')).strip() for c in ['Link_Foto2', 'Link_Foto3'] if str(row.get(c, '')).strip() != ""]
                         if sub_imgs:
                             sub_c = st.columns(len(sub_imgs))
                             for j, s_url in enumerate(sub_imgs):
-                                try: sub_c[j].image(s_url, use_container_width=True)
+                                try: sub_c[j].image(s_url, use_column_width=True)
                                 except: pass
                         st.markdown(f"<h6 style='margin-top:10px;'>🏫 {row.get('Asal_Sekolah', '')}</h6>", unsafe_allow_html=True)
                         st.caption(f"📝 {row.get('Deskripsi_Kegiatan', '')}")
