@@ -63,11 +63,15 @@ def get_gspread_client():
 
 client, conn_status = get_gspread_client()
 
-@st.cache_data(ttl=600)
+client, conn_status = get_gspread_client()
+
+@st.cache_data(ttl=30)
 def load_data(sheet_name):
-    if client:
+    # Mengambil koneksi Google DI DALAM fungsi agar Streamlit tidak memunculkan error Unhashable global variable
+    local_client, _ = get_gspread_client() 
+    if local_client:
         try:
-            sheet = client.open(NAMA_SPREADSHEET).worksheet(sheet_name)
+            sheet = local_client.open(NAMA_SPREADSHEET).worksheet(sheet_name)
             raw_data = sheet.get_all_values()
             if len(raw_data) > 1:
                 headers = [str(h).strip() for h in raw_data[0]]
