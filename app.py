@@ -63,7 +63,8 @@ def get_gspread_client():
 
 client, conn_status = get_gspread_client()
 
-def load_data(sheet_name):
+@st.cache_data(ttl=600) # Menyimpan data di memori selama 10 menit (600 detik)
+def load_data(sheet_name): 
     if client:
         try:
             sheet = client.open(NAMA_SPREADSHEET).worksheet(sheet_name)
